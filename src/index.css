@@ -1,0 +1,237 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   Knit Workshop — Modern Monochrome Studio System (Figma / Adobe Inspired)
+   ========================================================================== */
+
+:root {
+  --font-display: 'Plus Jakarta Sans', 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Modern Neutral Grayscale Surfaces */
+  --kw-canvas: #ECECEF;
+  --kw-surface: #FFFFFF;
+  --kw-surface-subtle: #F4F4F6;
+  --kw-surface-hover: #EAEAEF;
+  --kw-paper: #FFFFFF;
+  --kw-knit-bed: #EBEBEB;
+
+  /* Crisp Neutral Typography Hierarchy */
+  --kw-ink: #111113;
+  --kw-ink-secondary: #3F3F46;
+  --kw-ink-muted: #71717A;
+
+  /* Whisper-Thin Architectural Hairlines */
+  --kw-line: #E4E4E7;
+  --kw-line-strong: #D4D4D8;
+
+  /* Monochrome Interactive Accent + Semantic Error/Warning Only */
+  --kw-accent: #18181B;
+  --kw-accent-fg: #FFFFFF;
+  --kw-danger: #BE123C;
+  --kw-warning: #B45309;
+  --kw-warning-fg: #FFFFFF;
+  --kw-success: #18181B;
+  --kw-symmetry: #27272A;
+
+  --kw-accent-hover: #27272A;
+  --kw-accent-soft: rgba(24, 24, 27, 0.07);
+  --kw-accent-line: rgba(24, 24, 27, 0.28);
+  --kw-danger-bg: color-mix(in srgb, var(--kw-danger) 10%, transparent);
+  --kw-danger-line: color-mix(in srgb, var(--kw-danger) 42%, transparent);
+  --kw-warning-bg: color-mix(in srgb, var(--kw-warning) 12%, transparent);
+  --kw-warning-line: color-mix(in srgb, var(--kw-warning) 42%, transparent);
+  --kw-success-bg: rgba(24, 24, 27, 0.07);
+  --kw-symmetry-bg: rgba(24, 24, 27, 0.08);
+
+  /* Modern Studio Radii & Refined Light-Mode Elevation */
+  --kw-radius-sm: 6px;
+  --kw-radius-md: 8px;
+  --kw-radius-lg: 12px;
+  --kw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --kw-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --kw-shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.14);
+  --kw-z-header: 30;
+  --kw-z-modal: 50;
+  --kw-z-toast: 60;
+  --kw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --kw-duration-fast: 130ms;
+}
+
+.dark {
+  /* Pitch-Black Canvas Surround + Refined Obsidian Studio Docks (Zero Black Drop Shadows) */
+  --kw-canvas: #000000;
+  --kw-surface: #0E0E10;
+  --kw-surface-subtle: #18181B;
+  --kw-surface-hover: #232327;
+  --kw-paper: #FFFFFF;
+  --kw-knit-bed: #EBEBEB;
+
+  --kw-ink: #FAFAFA;
+  --kw-ink-secondary: #D4D4D8;
+  --kw-ink-muted: #8E8E93;
+
+  --kw-line: #232327;
+  --kw-line-strong: #323238;
+
+  --kw-accent: #FAFAFA;
+  --kw-accent-fg: #09090B;
+  --kw-accent-hover: #E4E4E7;
+  --kw-accent-soft: rgba(255, 255, 255, 0.11);
+  --kw-accent-line: rgba(255, 255, 255, 0.28);
+
+  --kw-danger: #FB7185;
+  --kw-danger-bg: color-mix(in srgb, #881337 36%, transparent);
+  --kw-danger-line: color-mix(in srgb, #FB7185 45%, transparent);
+  --kw-warning: #FBBF24;
+  --kw-warning-fg: #000000;
+  --kw-warning-bg: color-mix(in srgb, #78350F 32%, transparent);
+  --kw-warning-line: color-mix(in srgb, #FBBF24 42%, transparent);
+  --kw-success: #E4E4E7;
+  --kw-success-bg: rgba(255, 255, 255, 0.11);
+  --kw-symmetry: #E4E4E7;
+  --kw-symmetry-bg: rgba(255, 255, 255, 0.12);
+
+  --kw-shadow-sm: none;
+  --kw-shadow-md: none;
+  --kw-shadow-lg: none;
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --color-canvas: var(--kw-canvas);
+  --color-surface: var(--kw-surface);
+  --color-surface-subtle: var(--kw-surface-subtle);
+  --color-surface-hover: var(--kw-surface-hover);
+  --color-paper: var(--kw-paper);
+  --color-knit-bed: var(--kw-knit-bed);
+
+  --color-ink: var(--kw-ink);
+  --color-ink-secondary: var(--kw-ink-secondary);
+  --color-ink-muted: var(--kw-ink-muted);
+
+  --color-line: var(--kw-line);
+  --color-line-strong: var(--kw-line-strong);
+
+  --color-accent: var(--kw-accent);
+  --color-accent-hover: var(--kw-accent-hover);
+  --color-accent-fg: var(--kw-accent-fg);
+  --color-accent-soft: var(--kw-accent-soft);
+  --color-accent-line: var(--kw-accent-line);
+
+  --color-danger: var(--kw-danger);
+  --color-danger-bg: var(--kw-danger-bg);
+  --color-danger-line: var(--kw-danger-line);
+  --color-warning: var(--kw-warning);
+  --color-warning-fg: var(--kw-warning-fg);
+  --color-warning-bg: var(--kw-warning-bg);
+  --color-warning-line: var(--kw-warning-line);
+  --color-success: var(--kw-success);
+  --color-success-bg: var(--kw-success-bg);
+  --color-symmetry: var(--kw-symmetry);
+  --color-symmetry-bg: var(--kw-symmetry-bg);
+
+  --radius-kw-sm: var(--kw-radius-sm);
+  --radius-kw-md: var(--kw-radius-md);
+  --radius-kw-lg: var(--kw-radius-lg);
+
+  --shadow-kw-sm: var(--kw-shadow-sm);
+  --shadow-kw-md: var(--kw-shadow-md);
+  --shadow-kw-lg: var(--kw-shadow-lg);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    letter-spacing: -0.005em;
+    scroll-behavior: smooth;
+    background-color: var(--kw-canvas);
+    color: var(--kw-ink);
+  }
+
+  body {
+    background-color: var(--kw-canvas);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  code, pre, textarea.font-mono, .font-mono {
+    font-family: var(--font-mono);
+    letter-spacing: 0em;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  button, [role="button"], select, summary {
+    transition: transform var(--kw-duration-fast) var(--kw-ease),
+      box-shadow var(--kw-duration-fast) var(--kw-ease),
+      background-color var(--kw-duration-fast) var(--kw-ease),
+      border-color var(--kw-duration-fast) var(--kw-ease),
+      color var(--kw-duration-fast) var(--kw-ease),
+      opacity var(--kw-duration-fast) var(--kw-ease);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--kw-accent);
+    outline-offset: 2px;
+  }
+
+  /* Thin Modern Studio Scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--kw-line-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--kw-line-strong);
+    border-radius: 9999px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Figma/Adobe Drafting Canvas Backdrop */
+.kw-stage-bg {
+  background-color: #ECECEF;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.dark .kw-stage-bg {
+  background-color: #000000;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
