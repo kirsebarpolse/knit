@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { BookOpen, Calculator, Download, FolderKanban, Grid3x3, LayoutTemplate, WifiOff } from 'lucide-react';
+import { BookOpen, Calculator, ChevronRight, Download, FolderKanban, Grid3x3, LayoutTemplate, WifiOff } from 'lucide-react';
 import type { Lang, TabId } from './core';
 import { tFor } from './core';
 
@@ -255,10 +255,11 @@ export const CollapsiblePanel: React.FC<{
 }> = ({ title, defaultOpen = false, className, children }) => (
   <details
     open={defaultOpen}
-    className={cn('rounded-kw-md border border-line bg-surface p-3.5', className)}
+    className={cn('group rounded-kw-md border border-line bg-surface p-3.5 transition-colors hover:border-line-strong', className)}
   >
-    <summary className="font-display text-sm font-semibold text-ink cursor-pointer select-none min-h-[38px] flex items-center">
-      {title}
+    <summary className="list-none [&::-webkit-details-marker]:hidden font-display text-sm font-semibold text-ink cursor-pointer select-none min-h-[38px] flex items-center justify-between gap-2 rounded-kw-sm px-1.5 -mx-1.5 hover:bg-surface-hover transition-colors">
+      <span>{title}</span>
+      <ChevronRight className="w-4 h-4 text-ink-muted shrink-0 transition-transform duration-150 group-open:rotate-90" />
     </summary>
     {children}
   </details>

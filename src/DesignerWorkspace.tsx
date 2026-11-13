@@ -1,20 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  AlignLeft,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ArrowUpRight,
   Ban,
+  Bookmark,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   ClipboardPaste,
   Columns,
   Command,
   Copy,
   Eraser,
   Eye,
+  FileCode2,
   FilePlus2,
   FlipHorizontal2,
   FlipVertical2,
@@ -22,17 +28,23 @@ import {
   Hand,
   Highlighter,
   Image as ImageIcon,
+  Layers,
   Lock,
   Maximize2,
+  Menu,
   Minimize2,
   Minus,
   Moon,
   PaintBucket,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Pipette,
   Plus,
+  PlusCircle,
   Redo2,
   RotateCcw,
   Rows,
@@ -44,6 +56,7 @@ import {
   SquareDashed,
   Sun,
   Trash2,
+  Type,
   Undo2,
   Unlock,
   Upload,
@@ -201,11 +214,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const [view, setView] = useState<ViewMode>('g');
   const [zoom, setZoom] = useState(1);
   const [activeDrawer, setActiveDrawer] = useState<'pattern' | 'fills' | null>(null);
-  const [showTextImport, setShowTextImport] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
+  const [customStitchModalOpen, setCustomStitchModalOpen] = useState(false);
+  const [gridEditorModalOpen, setGridEditorModalOpen] = useState(false);
+  const [gridEditorTab, setGridEditorTab] = useState<'text' | 'size'>('text');
   const [knitMode, setKnitMode] = useState(false);
   const [dimCompleted, setDimCompleted] = useState(true);
   const [floatLimit, setFloatLimit] = useState(5);
   const [doneStepIdxs, setDoneStepIdxs] = useState<number[]>([]);
+  const topMenuRef = useRef<HTMLDivElement>(null);
 
   // Persisted Workspace Layout & Accessibility Preferences
   const [zenMode, setZenMode] = useState<boolean>(() => {
@@ -217,13 +234,29 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     }
   });
   const [leftCompact, setLeftCompact] = useState<boolean>(() => {
-  try {
-    const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
-    return typeof raw.leftCompact === 'boolean' ? raw.leftCompact : true;
-  } catch {
-    return true;
-  }
-});
+    try {
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      return Boolean(raw.leftCompact);
+    } catch {
+      return false;
+    }
+  });
+  const [rightCompact, setRightCompact] = useState<boolean>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      return raw.rightCompact === undefined ? true : Boolean(raw.rightCompact);
+    } catch {
+      return true;
+    }
+  });
+  const [symbolsCompact, setSymbolsCompact] = useState<boolean>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      return raw.symbolsCompact === undefined ? true : Boolean(raw.symbolsCompact);
+    } catch {
+      return true;
+    }
+  });
   const [rightTab, setRightTab] = useState<'live' | 'checks' | 'legend'>(() => {
     try {
       const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
@@ -245,12 +278,24 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     try {
       localStorage.setItem(
         'kw-workspace-prefs-v1',
-        JSON.stringify({ zenMode, leftCompact, rightTab, showYarnLetters })
+        JSON.stringify({ zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters })
       );
     } catch {
       // ignore storage errors
     }
-  }, [zenMode, leftCompact, rightTab, showYarnLetters]);
+  }, [zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters]);
+
+  // Close workspace dropdown when clicking outside
+  useEffect(() => {
+    if (!topMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (topMenuRef.current && e.target instanceof Node && !topMenuRef.current.contains(e.target)) {
+        setTopMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [topMenuOpen]);
 
   // CAD Ergonomics: Spacebar temporary pan, Alt temporary eyedropper, Command Palette, Ghost HUD, Stamp placement, Magic Marker, Knit Cycle Counter
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -278,17 +323,20 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   }, [doc.id, doc.trk]);
 
   useEffect(() => {
-    if (!activeDrawer && !commandOpen && !pendingStamp) return;
+    if (!activeDrawer && !commandOpen && !pendingStamp && !topMenuOpen && !customStitchModalOpen && !gridEditorModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (commandOpen) setCommandOpen(false);
+        else if (topMenuOpen) setTopMenuOpen(false);
+        else if (customStitchModalOpen) setCustomStitchModalOpen(false);
+        else if (gridEditorModalOpen) setGridEditorModalOpen(false);
         else if (pendingStamp) setPendingStamp(null);
         else if (activeDrawer) setActiveDrawer(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeDrawer, commandOpen, pendingStamp]);
+  }, [activeDrawer, commandOpen, pendingStamp, topMenuOpen, customStitchModalOpen, gridEditorModalOpen]);
 
   // Global Figma/Photoshop-grade hotkeys: Tab = Zen Mode, Ctrl/Cmd+K = Command Palette, Space hold = Pan, Alt hold = Pipette
   useEffect(() => {
@@ -306,7 +354,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         return;
       }
 
-      if (isTypingTarget(e.target) || activeDrawer || commandOpen) return;
+      if (isTypingTarget(e.target) || activeDrawer || commandOpen || customStitchModalOpen || gridEditorModalOpen) return;
 
       if (e.key === 'Tab' && !knitMode) {
         e.preventDefault();
@@ -343,7 +391,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [activeDrawer, commandOpen, knitMode]);
+  }, [activeDrawer, commandOpen, customStitchModalOpen, gridEditorModalOpen, knitMode]);
 
   const [cursor, setCursor] = useState<{ r: number; k: number }>({ r: 0, k: 0 });
   const [selection, setSelection] = useState<SelectionRect | null>(null);
@@ -1600,6 +1648,48 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         run: () => setView((v) => (v === 'g' ? 'k' : 'g')),
       },
       {
+        id: 'custom-stitch',
+        group: lang === 'hu' ? 'Eszközök' : 'Tools',
+        label: t.panels.addCustomStitch,
+        run: () => setCustomStitchModalOpen(true),
+      },
+      {
+        id: 'grid-editor',
+        group: lang === 'hu' ? 'Minta' : 'Pattern',
+        label: lang === 'hu' ? 'Rácsszerkesztő (szöveg és méret)' : 'Grid editor (text and size)',
+        run: () => {
+          setGridEditorTab('text');
+          setGridEditorModalOpen(true);
+        },
+      },
+      {
+        id: 'toggle-left',
+        group: lang === 'hu' ? 'Nézet' : 'View',
+        label: leftCompact ? (lang === 'hu' ? 'Bal eszköztár kinyitása' : 'Expand left panel') : (lang === 'hu' ? 'Bal eszköztár bezárása' : 'Collapse left panel'),
+        run: () => {
+          setZenMode(false);
+          setLeftCompact((v) => !v);
+        },
+      },
+      {
+        id: 'toggle-symbols',
+        group: lang === 'hu' ? 'Nézet' : 'View',
+        label: symbolsCompact ? (lang === 'hu' ? 'Szemjelek oszlop kinyitása' : 'Open stitch symbols panel') : (lang === 'hu' ? 'Szemjelek oszlop bezárása' : 'Close stitch symbols panel'),
+        run: () => {
+          setZenMode(false);
+          setSymbolsCompact((v) => !v);
+        },
+      },
+      {
+        id: 'toggle-right',
+        group: lang === 'hu' ? 'Nézet' : 'View',
+        label: rightCompact ? (lang === 'hu' ? 'Jobb vizsgáló kinyitása' : 'Open right inspector') : (lang === 'hu' ? 'Jobb vizsgáló bezárása' : 'Close right inspector'),
+        run: () => {
+          setZenMode(false);
+          setRightCompact((v) => !v);
+        },
+      },
+      {
         id: 'fills',
         group: lang === 'hu' ? 'Eszközök' : 'Tools',
         label: lang === 'hu' ? 'Kitöltés és bélyegzők megnyitása' : 'Open Fills and Stamps',
@@ -1682,6 +1772,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
       lang,
       zenMode,
       knitMode,
+      leftCompact,
+      rightCompact,
+      symbolsCompact,
       t,
       doc,
       onChangeDoc,
@@ -1840,6 +1933,241 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          {!knitMode && (
+            <div ref={topMenuRef} className="relative">
+              <Button
+                variant={topMenuOpen ? 'primary' : 'secondary'}
+                size="sm"
+                aria-haspopup="menu"
+                aria-expanded={topMenuOpen}
+                onClick={() => setTopMenuOpen((v) => !v)}
+                title={
+                  lang === 'hu'
+                    ? 'Menü — zárt panelek mellett is elérhető műveletek'
+                    : 'Menu — tools and editors accessible when panels are closed'
+                }
+              >
+                <Menu className="w-3.5 h-3.5 shrink-0" />
+                <span>{lang === 'hu' ? 'Menü' : 'Menu'}</span>
+                <ChevronDown className={cn('w-3.5 h-3.5 shrink-0 transition-transform duration-150', topMenuOpen && 'rotate-180')} />
+              </Button>
+
+              {topMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label={lang === 'hu' ? 'Munkaterület menü' : 'Workspace menu'}
+                  className="absolute right-0 mt-1.5 w-68 rounded-kw-md border border-line-strong bg-surface shadow-kw-lg py-1.5 z-[var(--kw-z-modal)]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setTopMenuOpen(false);
+                      setCustomStitchModalOpen(true);
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <PlusCircle className="w-4 h-4 text-ink-muted shrink-0" />
+                      <span className="truncate">{t.panels.addCustomStitch}</span>
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setTopMenuOpen(false);
+                      if (!instructionsText.trim()) generateRowInstructions();
+                      setGridEditorTab('text');
+                      setGridEditorModalOpen(true);
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <FileCode2 className="w-4 h-4 text-ink-muted shrink-0" />
+                      <span className="truncate">{lang === 'hu' ? 'Rácsszerkesztő' : 'Grid editor'}</span>
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                  </button>
+
+                  <div className="my-1 border-t border-line" role="separator" />
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setTopMenuOpen(false);
+                      setActiveDrawer('fills');
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <PaintBucket className="w-4 h-4 text-ink-muted shrink-0" />
+                      <span className="truncate">{lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setTopMenuOpen(false);
+                      setActiveDrawer('pattern');
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <SlidersHorizontal className="w-4 h-4 text-ink-muted shrink-0" />
+                      <span className="truncate">{lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                  </button>
+
+                  <div className="my-1 border-t border-line" role="separator" />
+
+                  <div className="px-3 py-1 text-[11px] font-semibold text-ink-muted">
+                    {t.panels.pencil}
+                  </div>
+                  {(
+                    [
+                      ['b', t.panels.both, Layers],
+                      ['c', t.panels.yarnOnly, Palette],
+                      ['s', t.panels.stitchOnly, Type],
+                    ] as const
+                  ).map(([m, label, Icon]) => {
+                    const active = brushMode === m;
+                    return (
+                      <button
+                        key={`menu-bm-${m}`}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        onClick={() => setBrushMode(m)}
+                        className={cn(
+                          'w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs cursor-pointer',
+                          active ? 'bg-surface-hover font-semibold text-ink' : 'text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                        )}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          <span>{label}</span>
+                        </span>
+                        {active && <Check className="w-3.5 h-3.5 shrink-0 text-ink" />}
+                      </button>
+                    );
+                  })}
+
+                  <div className="my-1 border-t border-line" role="separator" />
+
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={symX}
+                    onClick={() => setSymX((v) => !v)}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FlipHorizontal2 className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                      <span>{symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}</span>
+                    </span>
+                    {symX && <Check className="w-3.5 h-3.5 shrink-0 text-ink" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={symY}
+                    onClick={() => setSymY((v) => !v)}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FlipVertical2 className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                      <span>{symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}</span>
+                    </span>
+                    {symY && <Check className="w-3.5 h-3.5 shrink-0 text-ink" />}
+                  </button>
+
+                  <div className="my-1 border-t border-line" role="separator" />
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setZenMode(false);
+                      setLeftCompact((v) => !v);
+                      setTopMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      {leftCompact ? <PanelLeftOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelLeftClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
+                      <span>
+                        {leftCompact
+                          ? lang === 'hu'
+                            ? 'Bal eszköztár kinyitása'
+                            : 'Open left panel'
+                          : lang === 'hu'
+                          ? 'Bal eszköztár bezárása'
+                          : 'Close left panel'}
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setZenMode(false);
+                      setSymbolsCompact((v) => !v);
+                      setTopMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      {symbolsCompact ? <PanelRightOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelRightClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
+                      <span>
+                        {symbolsCompact
+                          ? lang === 'hu'
+                            ? 'Szemjelek oszlop kinyitása'
+                            : 'Open stitch symbols'
+                          : lang === 'hu'
+                          ? 'Szemjelek oszlop bezárása'
+                          : 'Close stitch symbols'}
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setZenMode(false);
+                      setRightCompact((v) => !v);
+                      setTopMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      {rightCompact ? <PanelRightOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelRightClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
+                      <span>
+                        {rightCompact
+                          ? lang === 'hu'
+                            ? 'Jobb vizsgáló kinyitása'
+                            : 'Open right panel'
+                          : lang === 'hu'
+                          ? 'Jobb vizsgáló bezárása'
+                          : 'Close right panel'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <Button
             variant="secondary"
             size="sm"
@@ -1863,6 +2191,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               >
                 <PaintBucket className="w-3.5 h-3.5 shrink-0" />
                 <span>{lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}</span>
+                <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-65" />
               </Button>
 
               <Button
@@ -1873,6 +2202,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
                 <span>{lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}</span>
+                <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-65" />
               </Button>
             </>
           )}
@@ -2170,21 +2500,17 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         </div>
       )}
 
-      {/* MAIN DOCKED STUDIO WORKSPACE (Seamless Left Dock + Drafting Canvas Stage + Right Inspector Dock) */}
-      <div
-        className={cn(
-          'grid flex-1 gap-0 items-stretch',
-          knitMode || zenMode
-            ? 'grid-cols-1'
-            : leftCompact
-            ? 'grid-cols-1 lg:grid-cols-[64px_minmax(0,1fr)_328px] xl:grid-cols-[64px_minmax(0,1fr)_344px]'
-            : 'grid-cols-1 lg:grid-cols-[248px_minmax(0,1fr)_328px] xl:grid-cols-[260px_minmax(0,1fr)_344px]'
-        )}
-      >
-        {/* LEFT STUDIO DOCK: Seamless Tools & Stitch Symbol Palette */}
+      {/* MAIN DOCKED STUDIO WORKSPACE (Left Tools + Center Canvas + Right Stitch Symbols + Right Inspector) */}
+      <div className="flex flex-col lg:flex-row flex-1 items-stretch min-h-0">
+        {/* LEFT STUDIO DOCK: Drawing Tools, Mirror & Brush Mode */}
         {!knitMode && !zenMode && (
-          <aside className="order-2 lg:order-1 border-t lg:border-t-0 lg:border-r border-line bg-surface lg:sticky lg:top-12 lg:max-h-[calc(100vh-97px)] lg:overflow-y-auto divide-y divide-line">
-            <div className="space-y-2 p-2.5">
+          <aside
+            className={cn(
+              'order-2 lg:order-1 shrink-0 border-t lg:border-t-0 lg:border-r border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              leftCompact ? 'lg:w-[60px]' : 'lg:w-[244px] xl:w-[256px]'
+            )}
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 p-2.5">
               <div className="flex items-center justify-between gap-1 px-0.5">
                 {!leftCompact && (
                   <span className="text-xs font-semibold text-ink-secondary">
@@ -2194,9 +2520,13 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 <button
                   type="button"
                   onClick={() => setLeftCompact((v) => !v)}
-                  aria-label={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv összecsukása' : 'Compact left rail'}
-                  title={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv összecsukása' : 'Compact left rail'}
-                  className="ml-auto min-h-[28px] min-w-[28px] rounded-kw-sm hover:bg-surface-hover flex items-center justify-center text-ink-muted hover:text-ink cursor-pointer"
+                  aria-expanded={!leftCompact}
+                  aria-label={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv bezárása' : 'Collapse left rail'}
+                  title={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv bezárása' : 'Collapse left rail'}
+                  className={cn(
+                    'min-h-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors',
+                    leftCompact ? 'w-full' : 'ml-auto min-w-[28px]'
+                  )}
                 >
                   {leftCompact ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
                 </button>
@@ -2211,7 +2541,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     pressed={effectiveTool === id}
                     onClick={() => setTool(id)}
                     title={`${label} (${keyHint})`}
-                    className={leftCompact ? 'min-h-[38px] py-1.5 px-1' : undefined}
+                    className={leftCompact ? 'min-h-[34px] py-1 px-1' : undefined}
                   >
                     <Icon className="w-4 h-4" />
                     {!leftCompact && <span className="truncate max-w-full">{label}</span>}
@@ -2219,9 +2549,60 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 ))}
               </div>
 
-              {!leftCompact && (
+              {leftCompact ? (
                 <>
-                  <div className="pt-1.5 grid grid-cols-2 gap-1.5">
+                  {/* Closed-rail Mirror & Brush Mode icon indicators/toggles */}
+                  <div className="pt-1.5 border-t border-line grid grid-cols-1 gap-1">
+                    <ToggleButton
+                      layout="tile"
+                      tone="symmetry"
+                      pressed={symX}
+                      onClick={() => setSymX((v) => !v)}
+                      aria-label={symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
+                      title={symX ? (lang === 'hu' ? 'Tükör ↔ be (kattints a kikapcsoláshoz)' : 'Mirror ↔ on (click to turn off)') : lang === 'hu' ? 'Tükör ↔ ki (kattints a bekapcsoláshoz)' : 'Mirror ↔ off (click to turn on)'}
+                      className="min-h-[32px] py-1 px-1"
+                    >
+                      <FlipHorizontal2 className="w-4 h-4" />
+                    </ToggleButton>
+                    <ToggleButton
+                      layout="tile"
+                      tone="symmetry"
+                      pressed={symY}
+                      onClick={() => setSymY((v) => !v)}
+                      aria-label={symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
+                      title={symY ? (lang === 'hu' ? 'Tükör ↕ be (kattints a kikapcsoláshoz)' : 'Mirror ↕ on (click to turn off)') : lang === 'hu' ? 'Tükör ↕ ki (kattints a bekapcsoláshoz)' : 'Mirror ↕ off (click to turn on)'}
+                      className="min-h-[32px] py-1 px-1"
+                    >
+                      <FlipVertical2 className="w-4 h-4" />
+                    </ToggleButton>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-line grid grid-cols-1 gap-1">
+                    {(
+                      [
+                        ['b', t.panels.both, Layers],
+                        ['c', t.panels.yarnOnly, Palette],
+                        ['s', t.panels.stitchOnly, Type],
+                      ] as const
+                    ).map(([m, label, Icon]) => (
+                      <ToggleButton
+                        key={`lc-bm-${m}`}
+                        layout="tile"
+                        tone="accent"
+                        pressed={brushMode === m}
+                        onClick={() => setBrushMode(m)}
+                        aria-label={label}
+                        title={label}
+                        className="min-h-[32px] py-1 px-1"
+                      >
+                        <Icon className="w-4 h-4" />
+                      </ToggleButton>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="pt-1.5 border-t border-line grid grid-cols-2 gap-1.5">
                     <ToggleButton
                       layout="inline"
                       tone="symmetry"
@@ -2239,7 +2620,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     >
                       <FlipHorizontal2 className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">
-                        {symX ? (lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off') : lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on'}
+                        {symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
                       </span>
                     </ToggleButton>
                     <ToggleButton
@@ -2259,7 +2640,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     >
                       <FlipVertical2 className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">
-                        {symY ? (lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off') : lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on'}
+                        {symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
                       </span>
                     </ToggleButton>
                   </div>
@@ -2287,143 +2668,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </>
               )}
             </div>
-
-            {/* Always-Visible 1-Click Stitch Symbol Palette */}
-            <div className="space-y-2 p-2.5">
-              {!leftCompact && (
-                <div className="flex items-center justify-between gap-2 px-0.5">
-                  <h2 className="text-xs font-semibold text-ink-secondary">
-                    {t.panels.symbols}
-                  </h2>
-                  <span className="font-mono text-[11px] font-medium text-ink-muted">
-                    {allStitches[curSym]?.code ?? 'k'}
-                  </span>
-                </div>
-              )}
-
-              <div className={cn('grid gap-1', leftCompact ? 'grid-cols-1' : 'grid-cols-2')}>
-                {allStitches.map((st) => {
-                  const active = curSym === st.idx;
-                  const shortTitle = (lang === 'hu' ? st.titleHu : st.titleEn).split('(')[0].trim();
-                  return (
-                    <button
-                      key={st.idx}
-                      type="button"
-                      aria-pressed={active}
-                      title={lang === 'hu' ? st.titleHu : st.titleEn}
-                      onClick={() => {
-                        setCurSym(st.idx);
-                        if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
-                      }}
-                      className={cn(
-                        'flex items-center gap-2 min-h-[38px] rounded-kw-sm border cursor-pointer',
-                        leftCompact ? 'justify-center px-1 py-1' : 'px-1.5 py-1 text-left',
-                        active
-                          ? 'border-transparent bg-accent text-accent-fg font-semibold shadow-kw-sm'
-                          : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover'
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'w-6 h-6 rounded-[5px] flex items-center justify-center font-semibold text-sm shrink-0',
-                          active
-                            ? 'bg-white/20 dark:bg-black/20'
-                            : 'bg-surface border border-line'
-                        )}
-                      >
-                        {st.glyph}
-                      </span>
-                      {!leftCompact && (
-                        <span className="min-w-0 flex-1 leading-tight">
-                          <span className="block text-xs font-medium truncate">{shortTitle}</span>
-                          <span
-                            className={cn(
-                              'block font-mono text-[10px] truncate',
-                              active ? 'text-accent-fg/75' : 'text-ink-muted'
-                            )}
-                          >
-                            {st.code}
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {!leftCompact && (
-                <details className="border-t border-line pt-2">
-                  <summary className="text-xs font-bold text-accent cursor-pointer min-h-[38px] flex items-center">
-                    {t.panels.addCustomStitch}
-                  </summary>
-                  <div className="mt-2 space-y-2 text-sm">
-                    <Input
-                      compact
-                      type="text"
-                      placeholder={lang === 'hu' ? 'Név (pl. Bogyó)' : 'Name (e.g. Bobble)'}
-                      maxLength={30}
-                      value={csName}
-                      onChange={(e) => setCsName(e.target.value)}
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        compact
-                        type="text"
-                        placeholder={lang === 'hu' ? 'Kód (mb)' : 'Code (mb)'}
-                        maxLength={8}
-                        value={csCode}
-                        onChange={(e) => setCsCode(e.target.value)}
-                        className="font-mono"
-                      />
-                      <Input
-                        compact
-                        type="text"
-                        placeholder={lang === 'hu' ? 'Jel (B)' : 'Symbol (B)'}
-                        maxLength={2}
-                        value={csGlyph}
-                        onChange={(e) => setCsGlyph(e.target.value)}
-                        className="text-center font-bold"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <label>
-                        <span className="text-[12px] font-medium text-ink-secondary">{lang === 'hu' ? 'Felhasznál' : 'Uses'}</span>
-                        <Input
-                          compact
-                          type="number"
-                          min={0}
-                          max={6}
-                          value={csUses}
-                          onChange={(e) => setCsUses(Number(e.target.value))}
-                          className="mt-1 tabular-nums"
-                        />
-                      </label>
-                      <label>
-                        <span className="text-[12px] font-medium text-ink-secondary">{lang === 'hu' ? 'Létrehoz' : 'Makes'}</span>
-                        <Input
-                          compact
-                          type="number"
-                          min={0}
-                          max={3}
-                          value={csMakes}
-                          onChange={(e) => setCsMakes(Number(e.target.value))}
-                          className="mt-1 tabular-nums"
-                        />
-                      </label>
-                    </div>
-                    <Button variant="primary" size="sm" onClick={handleAddCustomStitch} className="w-full">
-                      {lang === 'hu' ? 'Hozzáadás' : 'Add stitch'}
-                    </Button>
-                    {csMsg && <p className="text-xs font-medium text-ink-secondary">{csMsg}</p>}
-                  </div>
-                </details>
-              )}
-            </div>
           </aside>
         )}
 
         {/* CENTER STAGE: Docked Yarn Swatches + Drafting Dot-Grid Canvas */}
-        <div className="order-1 lg:order-2 flex flex-col min-w-0">
+        <div className="order-1 lg:order-2 flex-1 flex flex-col min-w-0">
           {/* Yarn Color Palette Strip + Magic Marker Quick Filter */}
           {!knitMode && (
             <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
@@ -2705,387 +2954,720 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* RIGHT STUDIO INSPECTOR: Seamless Docked Panel (Live Text / Checks / Legend) */}
+        {/* RIGHT COLUMN 1: DEDICATED STITCH SYMBOLS DOCK (Closed by default) */}
         {!knitMode && !zenMode && (
-          <aside className="order-3 border-t lg:border-t-0 lg:border-l border-line bg-surface lg:sticky lg:top-12 lg:max-h-[calc(100vh-97px)] lg:overflow-y-auto">
-            <div className="space-y-3 p-3.5">
-              {/* Always-Visible 1-Line Health & Active Row Strip */}
-              <div className="space-y-1.5 border-b border-line pb-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('checks')}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 text-xs font-extrabold cursor-pointer',
-                      analysis.mismatchRows.length > 0
-                        ? 'text-danger'
-                        : analysis.floatRows.length > 0
-                        ? 'text-warning'
-                        : 'text-success'
-                    )}
-                  >
-                    {analysis.mismatchRows.length > 0 ? (
-                      <>
-                        <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>
-                          {lang === 'hu'
-                            ? `${analysis.mismatchRows.length} szemszám-hiba`
-                            : `${analysis.mismatchRows.length} row count error(s)`}
-                        </span>
-                      </>
-                    ) : analysis.floatRows.length > 0 ? (
-                      <>
-                        <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>
-                          {lang === 'hu'
-                            ? `${analysis.floatRows.length} sorban hosszú szál`
-                            : `${analysis.floatRows.length} long float row(s)`}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4 shrink-0" />
-                        <span>{lang === 'hu' ? 'Minden sor szemszáma rendben' : 'All row stitch counts OK'}</span>
-                      </>
-                    )}
-                  </button>
-                  <span className="font-mono text-xs font-semibold text-ink-muted tabular-nums">
-                    {doc.cols} × {doc.rows}
-                  </span>
+          <aside
+            className={cn(
+              'order-3 shrink-0 border-t lg:border-t-0 lg:border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              symbolsCompact ? 'lg:w-[60px]' : 'lg:w-[232px] xl:w-[248px]'
+            )}
+          >
+            {symbolsCompact ? (
+              <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-start gap-2 p-2.5 flex-1 min-h-0 overflow-hidden">
+                {/* Expand Stitch Symbols Column */}
+                <button
+                  type="button"
+                  onClick={() => setSymbolsCompact(false)}
+                  aria-expanded={false}
+                  aria-label={lang === 'hu' ? 'Szemjelek oszlop kinyitása' : 'Open stitch symbols'}
+                  title={lang === 'hu' ? 'Szemjelek oszlop kinyitása' : 'Open stitch symbols'}
+                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
+                >
+                  <PanelRightOpen className="w-4 h-4" />
+                </button>
+
+                {/* Closed Icon Rail: 1-Click Stitch Glyph Buttons */}
+                <div className="flex flex-row lg:flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-x-auto lg:overflow-y-auto lg:overflow-x-hidden lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  {allStitches.map((st) => {
+                    const active = curSym === st.idx;
+                    return (
+                      <button
+                        key={`sym-rail-${st.idx}`}
+                        type="button"
+                        aria-pressed={active}
+                        title={`${lang === 'hu' ? st.titleHu : st.titleEn} (${st.code})`}
+                        onClick={() => {
+                          setCurSym(st.idx);
+                          if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
+                        }}
+                        className={cn(
+                          'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center font-semibold text-sm shrink-0 cursor-pointer transition-colors',
+                          active
+                            ? 'border-transparent bg-accent text-accent-fg shadow-kw-sm'
+                            : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line'
+                        )}
+                      >
+                        {st.glyph}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {activeLiveRow && (
-                  <div className="rounded-kw-sm border border-line bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
-                    <span className="font-semibold text-ink mr-1.5">
-                      {lang === 'hu' ? `${activeLiveRow.rowNum}. sor (${activeLiveRow.tag}):` : `R${activeLiveRow.rowNum} (${activeLiveRow.tag}):`}
-                    </span>
-                    <span className="text-ink-secondary">{activeLiveRow.text}</span>
-                  </div>
-                )}
+                {/* Pinned Bottom Modal Trigger Icon: Add Custom Stitch */}
+                <div className="shrink-0 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomStitchModalOpen(true)}
+                    title={`${t.panels.addCustomStitch} (↗)`}
+                    aria-label={t.panels.addCustomStitch}
+                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong flex items-center justify-center text-ink cursor-pointer transition-colors"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-
-              {/* Clean Segmented Tabs: Live Text / Checks / Legend */}
-              <SegmentedControl className="w-full grid grid-cols-3 gap-0.5">
-                <ToggleButton
-                  layout="seg"
-                  tone="neutral"
-                  pressed={rightTab === 'live'}
-                  onClick={() => setRightTab('live')}
-                  className="px-1.5 text-xs"
-                >
-                  {lang === 'hu' ? 'Élő szöveg' : 'Live Text'}
-                </ToggleButton>
-                <ToggleButton
-                  layout="seg"
-                  tone="neutral"
-                  pressed={rightTab === 'checks'}
-                  onClick={() => setRightTab('checks')}
-                  className="px-1.5 text-xs"
-                >
-                  {lang === 'hu' ? 'Ellenőrzés' : 'Checks'}
-                  {analysis.mismatchRows.length > 0 ? ` (${analysis.mismatchRows.length})` : ''}
-                </ToggleButton>
-                <ToggleButton
-                  layout="seg"
-                  tone="neutral"
-                  pressed={rightTab === 'legend'}
-                  onClick={() => setRightTab('legend')}
-                  className="px-1.5 text-xs"
-                >
-                  {lang === 'hu' ? 'Jelmagyarázat' : 'Legend'}
-                </ToggleButton>
-              </SegmentedControl>
-
-              {/* TAB 1: LIVE WRITTEN PATTERN */}
-              {rightTab === 'live' && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-ink-secondary">
-                      {lang === 'hu' ? 'Kattints egy sorra az ugráshoz' : 'Click a row to jump'}
+            ) : (
+              <>
+                <div className="shrink-0 border-b border-line px-3 py-2.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="text-xs font-semibold text-ink-secondary truncate">
+                      {t.panels.symbols}
+                    </h2>
+                    <span className="font-mono text-[11px] font-medium text-ink-muted shrink-0">
+                      {allStitches[curSym]?.code ?? 'k'}
                     </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(fullLiveText).catch(() => {});
-                          setStatusMsg(lang === 'hu' ? 'Szöveges leírás másolva.' : 'Pattern instructions copied.');
-                        }}
-                        className="min-h-[34px] px-2.5 text-xs"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{lang === 'hu' ? 'Másolás' : 'Copy'}</span>
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() =>
-                          triggerBlobDownload(new Blob([fullLiveText], { type: 'text/plain' }), `${safeFilename(doc.nm)}.txt`)
-                        }
-                        className="min-h-[34px] px-2.5 text-xs"
-                      >
-                        TXT
-                      </Button>
-                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSymbolsCompact(true)}
+                    aria-expanded={true}
+                    aria-label={lang === 'hu' ? 'Szemjelek oszlop bezárása' : 'Close stitch symbols'}
+                    title={lang === 'hu' ? 'Szemjelek oszlop bezárása' : 'Close stitch symbols'}
+                    className="min-h-[28px] min-w-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors shrink-0"
+                  >
+                    <PanelRightClose className="w-4 h-4" />
+                  </button>
+                </div>
 
-                  <div className="max-h-[calc(100vh-390px)] min-h-[220px] overflow-y-auto rounded-kw-sm border border-line bg-surface-subtle/50 divide-y divide-line font-mono text-xs">
-                    {livePatternRows.map((item) => {
-                      const isActive = item.rowNum === activeCursorRow;
-                      const rowMismatch = mismatchSet.has(item.rowNum);
+                <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
+                  <div className="grid grid-cols-2 gap-1">
+                    {allStitches.map((st) => {
+                      const active = curSym === st.idx;
+                      const shortTitle = (lang === 'hu' ? st.titleHu : st.titleEn).split('(')[0].trim();
                       return (
                         <button
-                          key={item.rowNum}
+                          key={`sym-full-${st.idx}`}
                           type="button"
-                          onClick={() =>
-                            setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - item.rowNum)) }))
-                          }
+                          aria-pressed={active}
+                          title={lang === 'hu' ? st.titleHu : st.titleEn}
+                          onClick={() => {
+                            setCurSym(st.idx);
+                            if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
+                          }}
                           className={cn(
-                            'w-full text-left px-2.5 py-2 flex items-start gap-2 cursor-pointer',
-                            isActive ? 'bg-accent-soft font-bold text-ink' : 'hover:bg-surface-hover text-ink-secondary',
-                            rowMismatch && 'text-danger'
+                            'flex items-center gap-2 min-h-[36px] rounded-kw-sm border px-1.5 py-1 text-left cursor-pointer',
+                            active
+                              ? 'border-transparent bg-accent text-accent-fg font-semibold shadow-kw-sm'
+                              : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover'
                           )}
                         >
-                          <span className="shrink-0 font-bold tabular-nums w-12">
-                            {lang === 'hu' ? `${item.rowNum}.` : `R${item.rowNum}`}
+                          <span
+                            className={cn(
+                              'w-6 h-6 rounded-[5px] flex items-center justify-center font-semibold text-sm shrink-0',
+                              active
+                                ? 'bg-white/20 dark:bg-black/20'
+                                : 'bg-surface border border-line'
+                            )}
+                          >
+                            {st.glyph}
                           </span>
-                          <span className="break-words flex-1">{item.text}</span>
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block text-xs font-medium truncate">{shortTitle}</span>
+                            <span
+                              className={cn(
+                                'block font-mono text-[10px] truncate',
+                                active ? 'text-accent-fg/75' : 'text-ink-muted'
+                              )}
+                            >
+                              {st.code}
+                            </span>
+                          </span>
                         </button>
                       );
                     })}
                   </div>
+                </div>
 
-                  <div className="border-t border-line pt-2 space-y-2">
+                <div className="shrink-0 border-t border-line bg-surface p-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setCustomStitchModalOpen(true)}
+                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer transition-colors"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <PlusCircle className="w-4 h-4 shrink-0 text-ink-muted" />
+                      <span className="truncate">{t.panels.addCustomStitch}</span>
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-ink-muted" />
+                  </button>
+                </div>
+              </>
+            )}
+          </aside>
+        )}
+
+        {/* RIGHT COLUMN 2: STUDIO INSPECTOR (Closed by default) */}
+        {!knitMode && !zenMode && (
+          <aside
+            className={cn(
+              'order-4 shrink-0 border-t lg:border-t-0 lg:border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              rightCompact ? 'lg:w-[60px]' : 'lg:w-[320px] xl:w-[336px]'
+            )}
+          >
+            {rightCompact ? (
+              <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-start gap-2 p-2.5 flex-1 overflow-x-auto lg:overflow-y-auto lg:overflow-x-hidden">
+                {/* Open Right Inspector */}
+                <button
+                  type="button"
+                  onClick={() => setRightCompact(false)}
+                  aria-expanded={false}
+                  aria-label={lang === 'hu' ? 'Jobb sáv kinyitása' : 'Open right inspector'}
+                  title={lang === 'hu' ? 'Jobb sáv kinyitása' : 'Open right inspector'}
+                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
+                >
+                  <PanelRightOpen className="w-4 h-4" />
+                </button>
+
+                {/* Health Check Status Icon */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRightTab('checks');
+                    setRightCompact(false);
+                  }}
+                  title={
+                    analysis.mismatchRows.length > 0
+                      ? lang === 'hu'
+                        ? `${analysis.mismatchRows.length} szemszám-hiba — kattints a részletekért`
+                        : `${analysis.mismatchRows.length} row count error(s) — click to inspect`
+                      : analysis.floatRows.length > 0
+                      ? lang === 'hu'
+                        ? `${analysis.floatRows.length} sorban hosszú szál — kattints a részletekért`
+                        : `${analysis.floatRows.length} long float row(s) — click to inspect`
+                      : lang === 'hu'
+                      ? 'Minden sor szemszáma rendben'
+                      : 'All row stitch counts OK'
+                  }
+                  aria-label={lang === 'hu' ? 'Állapot és ellenőrzés' : 'Health check'}
+                  className={cn(
+                    'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center cursor-pointer shrink-0 transition-colors',
+                    analysis.mismatchRows.length > 0
+                      ? 'text-danger border-danger-line'
+                      : analysis.floatRows.length > 0
+                      ? 'text-warning border-warning-line'
+                      : 'text-success'
+                  )}
+                >
+                  {analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 ? (
+                    <AlertTriangle className="w-4 h-4" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Tab Quick-Open Icons */}
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRightTab('live');
+                      setRightCompact(false);
+                    }}
+                    title={lang === 'hu' ? 'Élő szöveg kinyitása' : 'Open Live Text'}
+                    aria-label={lang === 'hu' ? 'Élő szöveg' : 'Live Text'}
+                    className={cn(
+                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      rightTab === 'live'
+                        ? 'border-line-strong bg-surface-hover text-ink'
+                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                    )}
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRightTab('checks');
+                      setRightCompact(false);
+                    }}
+                    title={lang === 'hu' ? 'Ellenőrzés kinyitása' : 'Open Checks'}
+                    aria-label={lang === 'hu' ? 'Ellenőrzés' : 'Checks'}
+                    className={cn(
+                      'relative min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      rightTab === 'checks'
+                        ? 'border-line-strong bg-surface-hover text-ink'
+                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                    )}
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    {analysis.mismatchRows.length > 0 && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-danger" aria-hidden="true" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRightTab('legend');
+                      setRightCompact(false);
+                    }}
+                    title={lang === 'hu' ? 'Jelmagyarázat kinyitása' : 'Open Legend'}
+                    aria-label={lang === 'hu' ? 'Jelmagyarázat' : 'Legend'}
+                    className={cn(
+                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      rightTab === 'legend'
+                        ? 'border-line-strong bg-surface-hover text-ink'
+                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                    )}
+                  >
+                    <Bookmark className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Mirror & Brush Mode State Icons Visible While Right Panel Is Closed */}
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  <ToggleButton
+                    layout="tile"
+                    tone="symmetry"
+                    pressed={symX}
+                    onClick={() => setSymX((v) => !v)}
+                    aria-label={symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
+                    title={symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
+                    className="min-h-[32px] min-w-[32px] py-1 px-1"
+                  >
+                    <FlipHorizontal2 className="w-4 h-4" />
+                  </ToggleButton>
+                  <ToggleButton
+                    layout="tile"
+                    tone="symmetry"
+                    pressed={symY}
+                    onClick={() => setSymY((v) => !v)}
+                    aria-label={symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
+                    title={symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
+                    className="min-h-[32px] min-w-[32px] py-1 px-1"
+                  >
+                    <FlipVertical2 className="w-4 h-4" />
+                  </ToggleButton>
+                </div>
+
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  {(
+                    [
+                      ['b', t.panels.both, Layers],
+                      ['c', t.panels.yarnOnly, Palette],
+                      ['s', t.panels.stitchOnly, Type],
+                    ] as const
+                  ).map(([m, label, Icon]) => (
+                    <ToggleButton
+                      key={`rc-bm-${m}`}
+                      layout="tile"
+                      tone="accent"
+                      pressed={brushMode === m}
+                      onClick={() => setBrushMode(m)}
+                      aria-label={label}
+                      title={label}
+                      className="min-h-[32px] min-w-[32px] py-1 px-1"
+                    >
+                      <Icon className="w-4 h-4" />
+                    </ToggleButton>
+                  ))}
+                </div>
+
+                {/* Pinned Bottom Modal Trigger Icon: Grid Editor */}
+                <div className="lg:mt-auto lg:w-full lg:border-t lg:border-line lg:pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!instructionsText.trim()) generateRowInstructions();
+                      setGridEditorTab('text');
+                      setGridEditorModalOpen(true);
+                    }}
+                    title={lang === 'hu' ? 'Rácsszerkesztő megnyitása (↗)' : 'Open Grid editor (↗)'}
+                    aria-label={lang === 'hu' ? 'Rácsszerkesztő' : 'Grid editor'}
+                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong flex items-center justify-center text-ink cursor-pointer transition-colors"
+                  >
+                    <FileCode2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Expanded Header + Health Strip + Segmented Tabs */}
+                <div className="shrink-0 space-y-2.5 p-3.5 pb-2.5 border-b border-line">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-ink-secondary">
+                      {t.toolbar.rightPanel}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!showTextImport && !instructionsText.trim()) generateRowInstructions();
-                        setShowTextImport((v) => !v);
-                      }}
-                      className="text-xs font-bold text-accent hover:underline cursor-pointer"
+                      onClick={() => setRightCompact(true)}
+                      aria-expanded={true}
+                      aria-label={lang === 'hu' ? 'Jobb sáv bezárása' : 'Close right inspector'}
+                      title={lang === 'hu' ? 'Jobb sáv bezárása' : 'Close right inspector'}
+                      className="min-h-[28px] min-w-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors"
                     >
-                      {showTextImport
-                        ? lang === 'hu'
-                          ? 'Szövegbeviteli mező elrejtése'
-                          : 'Hide text-to-grid editor'
-                        : lang === 'hu'
-                        ? 'Szöveg szerkesztése → rácsra alkalmazás'
-                        : 'Edit text → apply to grid'}
+                      <PanelRightClose className="w-4 h-4" />
                     </button>
+                  </div>
 
-                    {showTextImport && (
-                      <div className="space-y-2">
-                        <Textarea
-                          rows={4}
-                          value={instructionsText}
-                          onChange={(e) => setInstructionsText(e.target.value)}
-                          placeholder="Row 1: k5, p2, k2tog..."
-                          className="p-2 font-mono text-xs"
-                        />
-                        {parseErrors.length > 0 && (
-                          <ul className="text-xs font-medium text-danger space-y-0.5">
-                            {parseErrors.map((err, idx) => (
-                              <li key={idx}>• {err}</li>
-                            ))}
-                          </ul>
+                  {/* Always-Visible 1-Line Health & Active Row Strip */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRightTab('checks')}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 text-xs font-bold rounded-kw-sm border border-transparent hover:border-line hover:bg-surface-hover px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors',
+                          analysis.mismatchRows.length > 0
+                            ? 'text-danger'
+                            : analysis.floatRows.length > 0
+                            ? 'text-warning'
+                            : 'text-success'
                         )}
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <Button variant="secondary" size="sm" onClick={generateRowInstructions}>
-                            {lang === 'hu' ? 'Frissítés rácsról' : 'Load from grid'}
-                          </Button>
-                          <Button variant="primary" size="sm" onClick={applyInstructionsToGrid}>
-                            {t.export.fromTxt}
-                          </Button>
-                        </div>
+                      >
+                        {analysis.mismatchRows.length > 0 ? (
+                          <>
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'hu'
+                                ? `${analysis.mismatchRows.length} szemszám-hiba`
+                                : `${analysis.mismatchRows.length} row count error(s)`}
+                            </span>
+                          </>
+                        ) : analysis.floatRows.length > 0 ? (
+                          <>
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'hu'
+                                ? `${analysis.floatRows.length} sorban hosszú szál`
+                                : `${analysis.floatRows.length} long float row(s)`}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 shrink-0" />
+                            <span>{lang === 'hu' ? 'Minden sor szemszáma rendben' : 'All row stitch counts OK'}</span>
+                          </>
+                        )}
+                        <ChevronRight className="w-3 h-3 opacity-60 shrink-0" />
+                      </button>
+                      <span className="font-mono text-xs font-semibold text-ink-muted tabular-nums">
+                        {doc.cols} × {doc.rows}
+                      </span>
+                    </div>
+
+                    {activeLiveRow && (
+                      <div className="rounded-kw-sm border border-line bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
+                        <span className="font-semibold text-ink mr-1.5">
+                          {lang === 'hu' ? `${activeLiveRow.rowNum}. sor (${activeLiveRow.tag}):` : `R${activeLiveRow.rowNum} (${activeLiveRow.tag}):`}
+                        </span>
+                        <span className="text-ink-secondary">{activeLiveRow.text}</span>
                       </div>
                     )}
                   </div>
+
+                  {/* Clean Segmented Tabs: Live Text / Checks / Legend */}
+                  <SegmentedControl className="w-full grid grid-cols-3 gap-0.5">
+                    <ToggleButton
+                      layout="seg"
+                      tone="neutral"
+                      pressed={rightTab === 'live'}
+                      onClick={() => setRightTab('live')}
+                      className="px-1.5 text-xs"
+                    >
+                      {lang === 'hu' ? 'Élő szöveg' : 'Live Text'}
+                    </ToggleButton>
+                    <ToggleButton
+                      layout="seg"
+                      tone="neutral"
+                      pressed={rightTab === 'checks'}
+                      onClick={() => setRightTab('checks')}
+                      className="px-1.5 text-xs"
+                    >
+                      {lang === 'hu' ? 'Ellenőrzés' : 'Checks'}
+                      {analysis.mismatchRows.length > 0 ? ` (${analysis.mismatchRows.length})` : ''}
+                    </ToggleButton>
+                    <ToggleButton
+                      layout="seg"
+                      tone="neutral"
+                      pressed={rightTab === 'legend'}
+                      onClick={() => setRightTab('legend')}
+                      className="px-1.5 text-xs"
+                    >
+                      {lang === 'hu' ? 'Jelmagyarázat' : 'Legend'}
+                    </ToggleButton>
+                  </SegmentedControl>
                 </div>
-              )}
 
-              {/* TAB 2: STITCH & FLOAT CHECKER (Plain Human Language) */}
-              {rightTab === 'checks' && (
-                <div className="space-y-2.5">
-                  {(analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 || analysis.multiColorRows.length > 0) && (
-                    <Alert tone="warning" className="px-3 py-2.5 text-xs space-y-1">
-                      {analysis.mismatchRows.length > 0 && (
-                        <div className="font-bold text-danger">
-                          {t.checks.mismatch} {analysis.mismatchRows.join(', ')}
-                        </div>
-                      )}
-                      {analysis.floatRows.length > 0 && (
-                        <div className="text-ink">
-                          {t.checks.floatWarn} {analysis.floatRows.slice(0, 8).join(', ')}
-                          {analysis.floatRows.length > 8 ? '…' : ''}
-                        </div>
-                      )}
-                      {analysis.multiColorRows.length > 0 && (
-                        <div className="text-ink">
-                          {t.checks.colorWarn} {analysis.multiColorRows.slice(0, 8).join(', ')}
-                          {analysis.multiColorRows.length > 8 ? '…' : ''}
-                        </div>
-                      )}
-                    </Alert>
-                  )}
-
-                  <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 border border-line tabular-nums">
-                    <div className="font-semibold text-ink">
-                      {activeRowAnalysis ? (
-                        activeRowAnalysis.status === 'mismatch' ? (
-                          <span className="text-danger">{activeRowAnalysis.message}</span>
-                        ) : (
-                          <span>
-                            {lang === 'hu'
-                              ? `${activeCursorRow}. sor: ${activeRowAnalysis.uses} szemből ${activeRowAnalysis.made} lesz`
-                              : `Row ${activeCursorRow}: uses ${activeRowAnalysis.uses}, makes ${activeRowAnalysis.made}`}
-                          </span>
-                        )
-                      ) : (
-                        <span>
-                          {doc.cols} → {doc.cols}
+                {/* Scrollable Tab Body */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-3">
+                  {/* TAB 1: LIVE WRITTEN PATTERN */}
+                  {rightTab === 'live' && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-ink-secondary">
+                          {lang === 'hu' ? 'Kattints egy sorra az ugráshoz' : 'Click a row to jump'}
                         </span>
-                      )}
-                    </div>
-                    <label className="inline-flex items-center gap-1.5 text-ink-secondary font-semibold shrink-0">
-                      <span>{lang === 'hu' ? 'Max szál' : 'Max float'}</span>
-                      <Input
-                        compact
-                        type="number"
-                        min={3}
-                        max={20}
-                        value={floatLimit}
-                        onChange={(e) => setFloatLimit(Math.max(3, Math.min(20, Number(e.target.value) || 5)))}
-                        className="w-14 min-h-[32px] py-1 px-1.5 text-right text-xs tabular-nums"
-                      />
-                    </label>
-                  </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(fullLiveText).catch(() => {});
+                              setStatusMsg(lang === 'hu' ? 'Szöveges leírás másolva.' : 'Pattern instructions copied.');
+                            }}
+                            className="min-h-[32px] px-2.5 text-xs"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>{lang === 'hu' ? 'Másolás' : 'Copy'}</span>
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              triggerBlobDownload(new Blob([fullLiveText], { type: 'text/plain' }), `${safeFilename(doc.nm)}.txt`)
+                            }
+                            className="min-h-[32px] px-2.5 text-xs"
+                          >
+                            TXT
+                          </Button>
+                        </div>
+                      </div>
 
-                  <TableWrap className="max-h-[calc(100vh-400px)] min-h-[200px] overflow-y-auto">
-                    <table className="w-full text-xs tabular-nums">
-                      <thead className="bg-surface-subtle text-ink-secondary sticky top-0">
-                        <tr>
-                          <th className="px-2 py-1.5 text-left">{lang === 'hu' ? 'Sor' : 'Row'}</th>
-                          <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Indul' : 'Uses'}</th>
-                          <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Lesz' : 'Makes'}</th>
-                          <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Max szál' : 'Float'}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {analysis.rows.map((r) => {
-                          const isActive = r.rowNum === activeCursorRow;
+                      <div className="rounded-kw-sm border border-line bg-surface-subtle/50 divide-y divide-line font-mono text-xs">
+                        {livePatternRows.map((item) => {
+                          const isActive = item.rowNum === activeCursorRow;
+                          const rowMismatch = mismatchSet.has(item.rowNum);
                           return (
-                            <tr
-                              key={r.rowNum}
-                              onClick={() => {
-                                setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - r.rowNum)) }));
-                              }}
+                            <button
+                              key={item.rowNum}
+                              type="button"
+                              onClick={() =>
+                                setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - item.rowNum)) }))
+                              }
                               className={cn(
-                                'cursor-pointer',
-                                r.status === 'mismatch'
-                                  ? 'bg-danger-bg text-danger font-bold'
-                                  : r.maxFloat > floatLimit
-                                  ? 'bg-warning-bg text-warning font-semibold'
-                                  : isActive
-                                  ? 'bg-accent-soft text-ink font-bold'
-                                  : 'hover:bg-surface-hover'
+                                'group w-full text-left px-2.5 py-2 flex items-start gap-2 cursor-pointer transition-colors',
+                                isActive ? 'bg-accent-soft font-bold text-ink' : 'hover:bg-surface-hover text-ink-secondary',
+                                rowMismatch && 'text-danger'
                               )}
                             >
-                              <td className="px-2 py-1.5">
-                                {isActive ? '▸ ' : ''}
-                                {r.rowNum}
-                              </td>
-                              <td className="px-2 py-1.5 text-right">{r.uses}</td>
-                              <td className="px-2 py-1.5 text-right">{r.made}</td>
-                              <td className="px-2 py-1.5 text-right">{r.maxFloat || '–'}</td>
-                            </tr>
+                              <span className="shrink-0 font-bold tabular-nums w-10">
+                                {lang === 'hu' ? `${item.rowNum}.` : `R${item.rowNum}`}
+                              </span>
+                              <span className="break-words flex-1">{item.text}</span>
+                              <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-60 mt-0.5 transition-opacity" />
+                            </button>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </TableWrap>
-                </div>
-              )}
-
-              {/* TAB 3: LEGEND / KEY + MAGIC MARKER HIGHLIGHT */}
-              {rightTab === 'legend' && (
-                <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto pr-0.5">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold text-ink-secondary">
-                      <span>{lang === 'hu' ? 'Fonalak (kattints a kiemeléshez)' : 'Yarns (click to spotlight)'}</span>
-                      <span className="font-mono tabular-nums">{formatDimensionsCm(doc.cols, doc.rows, doc.gauge)}</span>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      {doc.pal.map((hex, idx) => {
-                        const st = yarnStats[idx];
-                        const highlighted = highlightYarn === idx;
-                        return (
-                          <button
-                            key={`leg-y-${idx}`}
-                            type="button"
-                            aria-pressed={highlighted}
-                            onClick={() => setHighlightYarn((prev) => (prev === idx ? null : idx))}
-                            className={cn(
-                              'w-full flex items-center justify-between gap-2 rounded-kw-sm border px-2.5 py-2 text-xs cursor-pointer tabular-nums transition-colors',
-                              highlighted
-                                ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover'
-                            )}
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span
-                                className="w-5 h-5 rounded-full border border-black/20 dark:border-white/25 flex items-center justify-center font-mono text-[11px] font-bold"
-                                style={{ backgroundColor: hex, color: contrastInk(hex) }}
+                  )}
+
+                  {/* TAB 2: STITCH & FLOAT CHECKER (Plain Human Language) */}
+                  {rightTab === 'checks' && (
+                    <div className="space-y-2.5">
+                      {(analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 || analysis.multiColorRows.length > 0) && (
+                        <Alert tone="warning" className="px-3 py-2.5 text-xs space-y-1">
+                          {analysis.mismatchRows.length > 0 && (
+                            <div className="font-bold text-danger">
+                              {t.checks.mismatch} {analysis.mismatchRows.join(', ')}
+                            </div>
+                          )}
+                          {analysis.floatRows.length > 0 && (
+                            <div className="text-ink">
+                              {t.checks.floatWarn} {analysis.floatRows.slice(0, 8).join(', ')}
+                              {analysis.floatRows.length > 8 ? '…' : ''}
+                            </div>
+                          )}
+                          {analysis.multiColorRows.length > 0 && (
+                            <div className="text-ink">
+                              {t.checks.colorWarn} {analysis.multiColorRows.slice(0, 8).join(', ')}
+                              {analysis.multiColorRows.length > 8 ? '…' : ''}
+                            </div>
+                          )}
+                        </Alert>
+                      )}
+
+                      <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 border border-line tabular-nums">
+                        <div className="font-semibold text-ink">
+                          {activeRowAnalysis ? (
+                            activeRowAnalysis.status === 'mismatch' ? (
+                              <span className="text-danger">{activeRowAnalysis.message}</span>
+                            ) : (
+                              <span>
+                                {lang === 'hu'
+                                  ? `${activeCursorRow}. sor: ${activeRowAnalysis.uses} szemből ${activeRowAnalysis.made} lesz`
+                                  : `Row ${activeCursorRow}: uses ${activeRowAnalysis.uses}, makes ${activeRowAnalysis.made}`}
+                              </span>
+                            )
+                          ) : (
+                            <span>
+                              {doc.cols} → {doc.cols}
+                            </span>
+                          )}
+                        </div>
+                        <label className="inline-flex items-center gap-1.5 text-ink-secondary font-semibold shrink-0">
+                          <span>{lang === 'hu' ? 'Max szál' : 'Max float'}</span>
+                          <Input
+                            compact
+                            type="number"
+                            min={3}
+                            max={20}
+                            value={floatLimit}
+                            onChange={(e) => setFloatLimit(Math.max(3, Math.min(20, Number(e.target.value) || 5)))}
+                            className="w-14 min-h-[32px] py-1 px-1.5 text-right text-xs tabular-nums"
+                          />
+                        </label>
+                      </div>
+
+                      <TableWrap>
+                        <table className="w-full text-xs tabular-nums">
+                          <thead className="bg-surface-subtle text-ink-secondary sticky top-0">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left">{lang === 'hu' ? 'Sor' : 'Row'}</th>
+                              <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Indul' : 'Uses'}</th>
+                              <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Lesz' : 'Makes'}</th>
+                              <th className="px-2 py-1.5 text-right">{lang === 'hu' ? 'Max szál' : 'Float'}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-line">
+                            {analysis.rows.map((r) => {
+                              const isActive = r.rowNum === activeCursorRow;
+                              return (
+                                <tr
+                                  key={r.rowNum}
+                                  onClick={() => {
+                                    setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - r.rowNum)) }));
+                                  }}
+                                  className={cn(
+                                    'cursor-pointer transition-colors',
+                                    r.status === 'mismatch'
+                                      ? 'bg-danger-bg text-danger font-bold'
+                                      : r.maxFloat > floatLimit
+                                      ? 'bg-warning-bg text-warning font-semibold'
+                                      : isActive
+                                      ? 'bg-accent-soft text-ink font-bold'
+                                      : 'hover:bg-surface-hover'
+                                  )}
+                                >
+                                  <td className="px-2 py-1.5">
+                                    {isActive ? '▸ ' : ''}
+                                    {r.rowNum}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right">{r.uses}</td>
+                                  <td className="px-2 py-1.5 text-right">{r.made}</td>
+                                  <td className="px-2 py-1.5 text-right">{r.maxFloat || '–'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </TableWrap>
+                    </div>
+                  )}
+
+                  {/* TAB 3: LEGEND / KEY + SPOTLIGHT HIGHLIGHT */}
+                  {rightTab === 'legend' && (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold text-ink-secondary">
+                          <span>{lang === 'hu' ? 'Fonalak (kattints a kiemeléshez)' : 'Yarns (click to spotlight)'}</span>
+                          <span className="font-mono tabular-nums">{formatDimensionsCm(doc.cols, doc.rows, doc.gauge)}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {doc.pal.map((hex, idx) => {
+                            const st = yarnStats[idx];
+                            const highlighted = highlightYarn === idx;
+                            return (
+                              <button
+                                key={`leg-y-${idx}`}
+                                type="button"
+                                aria-pressed={highlighted}
+                                onClick={() => setHighlightYarn((prev) => (prev === idx ? null : idx))}
+                                className={cn(
+                                  'group w-full flex items-center justify-between gap-2 rounded-kw-sm border px-2.5 py-2 text-xs cursor-pointer tabular-nums transition-colors',
+                                  highlighted
+                                    ? 'border-accent-line bg-accent-soft font-semibold text-ink'
+                                    : 'border-line/70 bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line-strong'
+                                )}
                               >
-                                {YARN_LETTERS[idx]}
-                              </span>
-                              <span className="font-medium">
-                                {lang === 'hu' ? `Fonal ${YARN_LETTERS[idx]}` : `Yarn ${YARN_LETTERS[idx]}`}
-                              </span>
-                            </span>
-                            <span className="font-mono text-[11px] text-ink-muted">
-                              {st.pct}% · ~{st.meters}m · ~{st.grams}g
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                                <span className="inline-flex items-center gap-2">
+                                  <span
+                                    className="w-5 h-5 rounded-full border border-black/20 dark:border-white/25 flex items-center justify-center font-mono text-[11px] font-bold"
+                                    style={{ backgroundColor: hex, color: contrastInk(hex) }}
+                                  >
+                                    {YARN_LETTERS[idx]}
+                                  </span>
+                                  <span className="font-medium">
+                                    {lang === 'hu' ? `Fonal ${YARN_LETTERS[idx]}` : `Yarn ${YARN_LETTERS[idx]}`}
+                                  </span>
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-ink-muted">
+                                  <span>{st.pct}% · ~{st.meters}m · ~{st.grams}g</span>
+                                  <Eye className={cn('w-3.5 h-3.5 transition-opacity', highlighted ? 'opacity-100 text-ink' : 'opacity-35 group-hover:opacity-100')} />
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                  <div className="border-t border-line pt-2.5 space-y-1.5">
-                    <div className="text-xs font-semibold text-ink-secondary">
-                      {lang === 'hu' ? 'Használt szemjelek (kattints a kiemeléshez)' : 'Used stitches (click to spotlight)'}
+                      <div className="border-t border-line pt-2.5 space-y-1.5">
+                        <div className="text-xs font-semibold text-ink-secondary">
+                          {lang === 'hu' ? 'Használt szemjelek (kattints a kiemeléshez)' : 'Used stitches (click to spotlight)'}
+                        </div>
+                        <div className="space-y-1">
+                          {usedLegendStitches.map((st) => {
+                            const highlighted = highlightSym === st.idx;
+                            return (
+                              <button
+                                key={`leg-s-${st.idx}`}
+                                type="button"
+                                aria-pressed={highlighted}
+                                onClick={() => setHighlightSym((prev) => (prev === st.idx ? null : st.idx))}
+                                className={cn(
+                                  'group w-full flex items-center gap-2 rounded-kw-sm border px-2.5 py-1.5 text-left text-xs cursor-pointer transition-colors',
+                                  highlighted
+                                    ? 'border-accent-line bg-accent-soft font-semibold text-ink'
+                                    : 'border-line/70 bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line-strong'
+                                )}
+                              >
+                                <span className="w-6 h-6 rounded-[5px] border border-line bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
+                                  {st.glyph}
+                                </span>
+                                <span className="font-mono font-semibold shrink-0">{st.code}</span>
+                                <span className="text-ink-muted truncate flex-1">
+                                  {(lang === 'hu' ? st.titleHu : st.titleEn).split('(')[0].trim()}
+                                </span>
+                                <Eye className={cn('w-3.5 h-3.5 shrink-0 transition-opacity', highlighted ? 'opacity-100 text-ink' : 'opacity-35 group-hover:opacity-100')} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {usedLegendStitches.map((st) => {
-                        const highlighted = highlightSym === st.idx;
-                        return (
-                          <button
-                            key={`leg-s-${st.idx}`}
-                            type="button"
-                            aria-pressed={highlighted}
-                            onClick={() => setHighlightSym((prev) => (prev === st.idx ? null : st.idx))}
-                            className={cn(
-                              'w-full flex items-center gap-2 rounded-kw-sm border px-2.5 py-1.5 text-left text-xs cursor-pointer transition-colors',
-                              highlighted
-                                ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover'
-                            )}
-                          >
-                            <span className="w-6 h-6 rounded-[5px] border border-line bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
-                              {st.glyph}
-                            </span>
-                            <span className="font-mono font-semibold shrink-0">{st.code}</span>
-                            <span className="text-ink-muted truncate">
-                              {(lang === 'hu' ? st.titleHu : st.titleEn).split('(')[0].trim()}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
+
+                {/* Pinned Bottom Modal Trigger: Grid Editor */}
+                <div className="shrink-0 border-t border-line bg-surface p-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!instructionsText.trim()) generateRowInstructions();
+                      setGridEditorTab('text');
+                      setGridEditorModalOpen(true);
+                    }}
+                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer transition-colors"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <FileCode2 className="w-4 h-4 shrink-0 text-ink-muted" />
+                      <span className="truncate">{lang === 'hu' ? 'Rácsszerkesztő' : 'Grid editor'}</span>
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-ink-muted" />
+                  </button>
+                </div>
+              </>
+            )}
           </aside>
         )}
       </div>
@@ -3656,6 +4238,377 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           )}
         </div>
       )}
+
+      {/* Dedicated Modal: Add Custom Stitch */}
+      <Modal
+        open={customStitchModalOpen}
+        onClose={() => setCustomStitchModalOpen(false)}
+        maxWidthClass="max-w-md max-h-[88vh]"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3.5">
+          <SectionTitle className="border-b-0 pb-0 text-base">{t.panels.addCustomStitch}</SectionTitle>
+          <Button
+            variant="icon"
+            size="icon"
+            onClick={() => setCustomStitchModalOpen(false)}
+            aria-label={lang === 'hu' ? 'Bezárás' : 'Close'}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-4 text-sm">
+          <div className="space-y-3">
+            <label className="block">
+              <FieldLabel className="mb-1">{lang === 'hu' ? 'Szemjel neve' : 'Stitch name'}</FieldLabel>
+              <Input
+                compact
+                type="text"
+                placeholder={lang === 'hu' ? 'Név (pl. Bogyó)' : 'Name (e.g. Bobble)'}
+                maxLength={30}
+                value={csName}
+                onChange={(e) => setCsName(e.target.value)}
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <FieldLabel className="mb-1">{lang === 'hu' ? 'Rövid kód' : 'Code'}</FieldLabel>
+                <Input
+                  compact
+                  type="text"
+                  placeholder={lang === 'hu' ? 'pl. mb' : 'e.g. mb'}
+                  maxLength={8}
+                  value={csCode}
+                  onChange={(e) => setCsCode(e.target.value)}
+                  className="font-mono"
+                />
+              </label>
+              <label className="block">
+                <FieldLabel className="mb-1">{lang === 'hu' ? 'Szimbólum (1–2 jel)' : 'Symbol (1–2 chars)'}</FieldLabel>
+                <Input
+                  compact
+                  type="text"
+                  placeholder={lang === 'hu' ? 'pl. B' : 'e.g. B'}
+                  maxLength={2}
+                  value={csGlyph}
+                  onChange={(e) => setCsGlyph(e.target.value)}
+                  className="text-center font-bold"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <FieldLabel className="mb-1">{lang === 'hu' ? 'Felhasznál (szem)' : 'Uses (stitches)'}</FieldLabel>
+                <Input
+                  compact
+                  type="number"
+                  min={0}
+                  max={6}
+                  value={csUses}
+                  onChange={(e) => setCsUses(Number(e.target.value))}
+                  className="tabular-nums"
+                />
+              </label>
+              <label className="block">
+                <FieldLabel className="mb-1">{lang === 'hu' ? 'Létrehoz (szem)' : 'Makes (stitches)'}</FieldLabel>
+                <Input
+                  compact
+                  type="number"
+                  min={0}
+                  max={3}
+                  value={csMakes}
+                  onChange={(e) => setCsMakes(Number(e.target.value))}
+                  className="tabular-nums"
+                />
+              </label>
+            </div>
+
+            <Button variant="primary" onClick={handleAddCustomStitch} className="w-full">
+              <PlusCircle className="w-4 h-4" />
+              <span>{lang === 'hu' ? 'Szemjel hozzáadása' : 'Add custom stitch'}</span>
+            </Button>
+
+            {csMsg && <p className="text-xs font-medium text-ink-secondary">{csMsg}</p>}
+          </div>
+
+          {doc.cus.length > 0 && (
+            <div className="border-t border-line pt-3.5 space-y-2">
+              <div className="text-xs font-semibold text-ink-secondary">
+                {lang === 'hu' ? `Egyedi szemjelek (${doc.cus.length})` : `Custom stitches (${doc.cus.length})`}
+              </div>
+              <div className="divide-y divide-line rounded-kw-sm border border-line">
+                {doc.cus.map((c, cIdx) => {
+                  const fullIdx = BUILTIN_STITCHES.length + cIdx;
+                  const usedCount = doc.sy.reduce(
+                    (acc, row) => acc + row.filter((v) => v === fullIdx).length,
+                    0
+                  );
+                  return (
+                    <div key={`${c.n}-${cIdx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-[5px] border border-line bg-surface-subtle flex items-center justify-center font-bold shrink-0">
+                          {c.g}
+                        </span>
+                        <span className="font-mono font-semibold text-ink">{c.n}</span>
+                        <span className="text-ink-muted truncate">{c.t}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-[11px] text-ink-muted tabular-nums">
+                          {c.u}→{c.m}
+                        </span>
+                        <Button
+                          variant="icon"
+                          size="iconSm"
+                          disabled={usedCount > 0}
+                          title={
+                            usedCount > 0
+                              ? lang === 'hu'
+                                ? `Használatban (${usedCount} cella)`
+                                : `In use (${usedCount} cells)`
+                              : lang === 'hu'
+                              ? 'Törlés'
+                              : 'Delete'
+                          }
+                          aria-label={lang === 'hu' ? 'Szemjel törlése' : 'Delete custom stitch'}
+                          onClick={() => {
+                            if (usedCount > 0) return;
+                            pushUndo(doc);
+                            const nextCus = doc.cus.filter((_, j) => j !== cIdx);
+                            const nextSy = doc.sy.map((row) =>
+                              row.map((v) => (v > fullIdx ? v - 1 : v))
+                            );
+                            if (curSym === fullIdx) setCurSym(0);
+                            else if (curSym > fullIdx) setCurSym((s) => s - 1);
+                            onChangeDoc({ ...doc, cus: nextCus, sy: nextSy, updatedAt: Date.now() });
+                          }}
+                          className="text-danger"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Dedicated Modal: Grid Editor (Text-to-Grid + Size and Transform) */}
+      <Modal
+        open={gridEditorModalOpen}
+        onClose={() => setGridEditorModalOpen(false)}
+        maxWidthClass="max-w-2xl max-h-[88vh]"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3.5">
+          <SectionTitle className="border-b-0 pb-0 text-base">
+            {lang === 'hu' ? 'Rácsszerkesztő' : 'Grid editor'}
+          </SectionTitle>
+          <Button
+            variant="icon"
+            size="icon"
+            onClick={() => setGridEditorModalOpen(false)}
+            aria-label={lang === 'hu' ? 'Bezárás' : 'Close'}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        <div className="border-b border-line bg-surface-subtle/50 px-5 py-2.5">
+          <SegmentedControl className="grid grid-cols-2 w-full max-w-md gap-0.5">
+            <ToggleButton
+              layout="seg"
+              tone="neutral"
+              pressed={gridEditorTab === 'text'}
+              onClick={() => {
+                if (!instructionsText.trim()) generateRowInstructions();
+                setGridEditorTab('text');
+              }}
+              className="text-xs"
+            >
+              {lang === 'hu' ? 'Szöveg → rács' : 'Text → grid'}
+            </ToggleButton>
+            <ToggleButton
+              layout="seg"
+              tone="neutral"
+              pressed={gridEditorTab === 'size'}
+              onClick={() => setGridEditorTab('size')}
+              className="text-xs"
+            >
+              {t.panels.size}
+            </ToggleButton>
+          </SegmentedControl>
+        </div>
+
+        <div className="overflow-y-auto p-5 space-y-4 text-sm">
+          {gridEditorTab === 'text' ? (
+            <div className="space-y-3">
+              <p className="text-xs text-ink-secondary">
+                {lang === 'hu'
+                  ? 'Írd be vagy módosítsd a sorleírásokat (pl. Row 1: k5, p2, k2tog), majd alkalmazd a rácsra.'
+                  : 'Write or edit row instructions (e.g. Row 1: k5, p2, k2tog), then apply directly to the grid.'}
+              </p>
+              <Textarea
+                rows={10}
+                value={instructionsText}
+                onChange={(e) => setInstructionsText(e.target.value)}
+                placeholder="Row 1: k5, p2, k2tog..."
+                className="p-3 font-mono text-xs leading-relaxed"
+              />
+              {parseErrors.length > 0 && (
+                <ul className="text-xs font-medium text-danger space-y-0.5">
+                  {parseErrors.map((err, idx) => (
+                    <li key={idx}>• {err}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="secondary" onClick={generateRowInstructions}>
+                  {lang === 'hu' ? 'Frissítés rácsról' : 'Load from grid'}
+                </Button>
+                <Button variant="primary" onClick={applyInstructionsToGrid}>
+                  {t.export.fromTxt}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <label>
+                  <FieldLabel className="mb-1">{t.size.cols}</FieldLabel>
+                  <Input
+                    compact
+                    type="number"
+                    min={2}
+                    max={300}
+                    value={sizeCols}
+                    onChange={(e) => setSizeCols(Number(e.target.value))}
+                    className="tabular-nums"
+                  />
+                </label>
+                <label>
+                  <FieldLabel className="mb-1">{t.size.rows}</FieldLabel>
+                  <Input
+                    compact
+                    type="number"
+                    min={2}
+                    max={400}
+                    value={sizeRows}
+                    onChange={(e) => setSizeRows(Number(e.target.value))}
+                    className="tabular-nums"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="primary" onClick={handleResize}>
+                  {t.size.resize}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    pushUndo(doc);
+                    onChangeDoc({
+                      ...doc,
+                      grid: doc.grid.map((r) => r.slice().reverse()),
+                      sy: doc.sy.map((r) => r.slice().reverse().map(swapHorizontalStitch)),
+                      updatedAt: Date.now(),
+                    });
+                  }}
+                >
+                  {t.size.flipH}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 border-t border-line pt-3">
+                <Button variant="secondary" onClick={handleInsertRow}>
+                  <Rows className="w-3.5 h-3.5" />
+                  {t.size.insertRow}
+                </Button>
+                <Button variant="secondary" onClick={handleDeleteRow}>
+                  <Minus className="w-3.5 h-3.5" />
+                  {t.size.delRow}
+                </Button>
+                <Button variant="secondary" onClick={handleInsertCol}>
+                  <Columns className="w-3.5 h-3.5" />
+                  {t.size.insertCol}
+                </Button>
+                <Button variant="secondary" onClick={handleDeleteCol}>
+                  <Minus className="w-3.5 h-3.5" />
+                  {t.size.delCol}
+                </Button>
+              </div>
+
+              <div className="border-t border-line pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink-secondary">{t.size.shift}</span>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shiftWrap}
+                      onChange={(e) => setShiftWrap(e.target.checked)}
+                      className="w-4 h-4 accent-neutral-800 dark:accent-neutral-300"
+                    />
+                    <span>{t.size.wrap}</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => handleShift(0, -1)} aria-label="Shift left">
+                    <ArrowLeft className="w-4 h-4" />
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => handleShift(-1, 0)} aria-label="Shift up">
+                    <ArrowUp className="w-4 h-4" />
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => handleShift(1, 0)} aria-label="Shift down">
+                    <ArrowDown className="w-4 h-4" />
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => handleShift(0, 1)} aria-label="Shift right">
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t border-line pt-3 flex items-end gap-2">
+                <label className="flex-1">
+                  <FieldLabel className="mb-1">{t.size.stretchLabel}</FieldLabel>
+                  <Input
+                    compact
+                    type="number"
+                    min={2}
+                    max={20}
+                    value={stretchEvery}
+                    onChange={(e) => setStretchEvery(Number(e.target.value))}
+                    className="tabular-nums"
+                  />
+                </label>
+                <Button variant="secondary" onClick={handleStretchRows}>
+                  {t.size.stretchBtn}
+                </Button>
+              </div>
+
+              <Button
+                variant="danger"
+                onClick={() => {
+                  pushUndo(doc);
+                  onChangeDoc({
+                    ...doc,
+                    grid: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
+                    sy: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
+                    updatedAt: Date.now(),
+                  });
+                }}
+                className="w-full"
+              >
+                <RotateCcw className="w-4 h-4" />
+                {t.size.reset}
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <ImageImportModal
         imageElement={pendingImageEl}

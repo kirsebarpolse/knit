@@ -12,31 +12,34 @@ Browser-based, offline-capable knitting pattern designer and toolkit featuring a
 
 ### Workspace and Visual System
 
-* **Docked Studio Shell:** Full-bleed three-column workspace (collapsible left tool dock, central drafting canvas, and right tabbed inspector) with a touch-friendly quick toolbelt on smaller screens.
-* **Monochrome Interface:** Strict black, white, and neutral gray UI surfaces to reduce visual fatigue; color is reserved exclusively for yarn swatches and critical error or warning indicators.
+* **Docked Four-Column Studio Shell:** Full-bleed responsive workspace combining a collapsible left **Tools** dock, central drafting canvas, and two independent right docks (**Stitch Symbols** and **Studio Inspector**) that both start **closed as compact icon rails** by default so the chart stays front and center.
+* **Top Workspace Menu and Quick Rails:** A **Menu** dropdown in the top workspace bar keeps **Add custom stitch**, **Grid editor**, **Fills and Stamps**, **Pattern, Size and Export**, **Brush mode**, **Mirror H/V**, and panel toggles reachable even when every sidebar is collapsed. Closed icon rails also display clickable icons for **Mirror H/V** axes and **Brush modes** (`Yarn + stitch`, `Yarn only`, `Stitch only`), active stitch glyphs, health status, and pinned modal triggers.
+* **Explicit Interactive Affordances:** Collapsible sections display rotating chevron indicators, drawer buttons show directional arrows, modal-opening actions carry external-launch cues, and expandable sidebars include clear open/close handles.
+* **Monochrome Interface:** Strict black, white, and neutral gray UI surfaces to reduce visual fatigue; color is reserved exclusively for yarn swatches and critical error, warning, or pass indicators.
 * **Light and Pitch-Black Dark Mode:** Subtle dotted drafting stage in light mode, pure black canvas surround in dark mode with shadowless panels.
-* **Zen Mode (`Tab`):** Hides both sidebars with a single keystroke so the chart occupies the full viewport.
+* **Zen Mode (`Tab`):** Hides all sidebars with a single keystroke so the chart occupies the full viewport.
 
 ### Key Features
 
 #### 1. Pattern Designer Workspace (`Designer`)
 * **Dual View Modes:** Classic symbol **Grid View** (5-stitch and 10-stitch helper lines with odd/even row direction markers) and gauge-accurate **Knitted View**.
 * **Color-Vision Accessibility (`A/B`):** Optionally displays yarn letters (`A–L`) directly inside grid cells.
-* **Drawing Tools:** Pencil (`P`), Eraser (`E`), No Stitch / Hatched Skip (`N`), Flood Fill (`F`), Line (`L`), Rectangle (`R`), Eyedropper (`I` or hold `Alt`), Selection (`S`), and Hand Pan (`H` or hold `Space`).
-* **Brush Modes and Symmetry:** Paint in **Yarn + stitch**, **Yarn only**, or **Stitch only** mode, with horizontal and vertical mirror axes and live guide lines.
+* **Drawing Tools (Left Dock):** Pencil (`P`), Eraser (`E`), No Stitch / Hatched Skip (`N`), Flood Fill (`F`), Line (`L`), Rectangle (`R`), Eyedropper (`I` or hold `Alt`), Selection (`S`), and Hand Pan (`H` or hold `Space`).
+* **Brush Modes and Symmetry:** Paint in **Yarn + stitch**, **Yarn only**, or **Stitch only** mode, with horizontal and vertical mirror axes and live guide lines—accessible in the expanded left dock, on closed left/right icon rails, and in the top **Menu** dropdown.
 * **Yarn Palette:** Up to 12 yarns (`A–L`) with circular color pickers, live stitch counts, and percentage/meter/gram usage estimates.
-* **Stitches and Custom Symbols:** 13 built-in stitches (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) plus custom user-defined stitches (`uses` / `makes` stitch counts). 4-stitch cables (`c4f`, `c4b`) span cleanly across adjacent cells.
+* **Dedicated Stitch Symbols Column (Right Dock 1):** Starts collapsed as a single-click symbol glyph strip with a pinned **Add custom stitch** icon at the bottom, and expands into a two-column symbol grid covering all 13 built-in stitches (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) plus custom user-defined stitches (`uses` / `makes` stitch counts via the standalone **Add custom stitch** modal). 4-stitch cables (`c4f`, `c4b`) span cleanly across adjacent cells.
 * **Selection and Transforms:** Copy, cut, paste, fill, clear, horizontal and vertical flip (automatically mirroring directional decreases and cables: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), and Undo/Redo history.
 * **Fill Generators and Motif Stamps (`Fills and Stamps` drawer):**
   * Built-in houndstooth, horizontal/vertical stripes, checkerboard, zigzag, and diamond generators.
   * Save any selection as a reusable motif stamp with a live transparent ghost preview on hover before placing.
 * **Command Palette (`Ctrl/Cmd + K`) and Cursor Ghost HUD:** Searchable quick-action launcher and live row/stitch coordinate HUD beside the cursor.
 
-#### 2. Right Studio Inspector
-* **One-Line Health Strip:** Summarizes stitch-count errors, long float warnings, chart size, and active row instructions at a glance.
-* **Live Text Tab:** Real-time written row instructions synchronized with the chart; click any row to jump, copy or export `.txt`, or edit text back onto the grid.
+#### 2. Right Studio Inspector (Right Dock 2)
+* **Compact Closed Rail (`60px`):** Shows live chart health status, direct **Live Text / Checks / Legend** jump icons, clickable **Mirror H/V** and **Brush mode** state icons, and a pinned **Grid editor** launch icon at the bottom.
+* **One-Line Health Strip:** Summarizes stitch-count errors, long float warnings, chart size, and active row instructions at a glance when expanded.
+* **Live Text Tab and Standalone Grid Editor Modal:** Real-time written row instructions synchronized with the chart; click any row to jump, copy or export `.txt`, or open the dedicated **Grid editor** modal from the pinned footer, top **Menu**, or command palette to edit written instructions back onto the grid.
 * **Checks Tab:** Per-row stitch balance table (`uses` vs `makes`), configurable float alert limit (`3–20` stitches), and multi-color row warnings.
-* **Legend Tab and Spotlight Marker:** Lists yarn usage and used stitch symbols; click any yarn or stitch to highlight matching cells on the chart while dimming the rest.
+* **Legend Tab and Spotlight Marker:** Lists yarn usage and used stitch symbols; click any yarn or stitch row to highlight matching cells on the chart while dimming the rest.
 
 #### 3. Hands-Free Knit Mode (`Knit Mode`)
 * **Edit Lock:** Prevents accidental chart edits while knitting.
@@ -128,31 +131,34 @@ Böngészőben futó, offline képes kötésminta-tervező és kötészeti segé
 
 ### Kialakítás és munkaterület
 
-* **Dokkolt stúdiófelület:** szegélytől szegélyig érő háromoszlopos szerkesztő (összecsukható bal oldali eszközsáv, középső rajzvászon és jobb oldali füles vizsgálópanel), kisebb kijelzőkön érintőbarát gyors eszköztárral.
-* **Monokróm megjelenés:** szigorúan fekete, fehér és semleges szürke felületek a vizuális fáradtság csökkentéséért; szín kizárólag a fonalmintákon, valamint a kritikus hiba- és figyelmeztető jelzéseken jelenik meg.
+* **Dokkolt négyoszlopos stúdiófelület:** szegélytől szegélyig érő reszponzív szerkesztő, amely egy összecsukható bal oldali **Eszközök** sávból, középső rajzvászonból és két független jobb oldali oszlopból (**Szemjelek** és **Vizsgálópanel**) áll; mindkét jobb oldali oszlop alapértelmezetten **zárt ikonsávként** indul, így a minta marad a középpontban.
+* **Felső munkaterület-menü és zárt ikonsávok:** a felső sávban található **Menü** lenyíló menüből zárt oldalsávok mellett is azonnal elérhető a **Saját szemjel hozzáadása**, a **Rácsszerkesztő**, a **Kitöltés és bélyegzők**, a **Minta, méret és export**, az **Ecsetmód**, a **Tükrözés** és a panelek nyitása/zárása. A zárt ikonsávokon közvetlenül láthatók és kapcsolhatók a **Tükör (vízszintes/függőleges)** és **Ecsetmód** (`Fonál + szem`, `Csak fonál`, `Csak szem`) ikonok, az aktív szemjelek, az állapotjelző és az alul rögzített modális ablakindítók.
+* **Egyértelmű interaktív jelzések:** a nyitható szakaszok forgó nyíljelekkel, a fiókgombok irányjelző nyilakkal, a külön ablakban nyíló funkciók kilépőnyíl-jelzéssel, az oldalsávok pedig határozott nyitó/záró fülekkel mutatják a kezelhetőséget.
+* **Monokróm megjelenés:** szigorúan fekete, fehér és semleges szürke felületek a vizuális fáradtság csökkentéséért; szín kizárólag a fonalmintákon, valamint a kritikus hiba-, figyelmeztető és megfelelt jelzéseken jelenik meg.
 * **Világos és tiszta fekete sötét mód:** finom pontrácsos rajzfelület világos módban, tiszta fekete vászonháttér sötét módban, árnyékmentes panelekkel.
-* **Zen mód (`Tab`):** egyetlen billentyűvel elrejti mindkét oldalsávot, így a minta a teljes képernyőt elfoglalja.
+* **Zen mód (`Tab`):** egyetlen billentyűvel elrejti az összes oldalsávot, így a minta a teljes képernyőt elfoglalja.
 
 ### Főbb funkciók
 
 #### 1. Mintatervező munkaterület (`Tervező`)
 * **Kétféle nézet:** klasszikus szimbólumos **Rács nézet** (5-ös és 10-es segédvonalakkal, páratlan/páros haladási irányjelzőkkel) és kötéspróba-arányos **Kötött nézet**.
 * **Színvak-barát fonaljelölés (`A/B`):** opcionálisan megjeleníti a fonal betűjelét (`A–L`) közvetlenül a rácscellákban.
-* **Rajzeszközök:** Ecset (`P`), Radír (`E`), Nincs szem / sraffozott kihagyás (`N`), Kitöltés (`F`), Vonal (`L`), Téglalap (`R`), Pipetta (`I` vagy `Alt` nyomva tartva), Kijelölés (`S`) és Kéz / mozgatás (`H` vagy `Space` nyomva tartva).
-* **Ecsetmódok és szimmetria:** festés **Fonal + szem**, **Csak fonal** vagy **Csak szem** módban, vízszintes és függőleges tükörtengelyekkel és élő segédvonalakkal.
+* **Rajzeszközök (Bal sáv):** Ecset (`P`), Radír (`E`), Nincs szem / sraffozott kihagyás (`N`), Kitöltés (`F`), Vonal (`L`), Téglalap (`R`), Pipetta (`I` vagy `Alt` nyomva tartva), Kijelölés (`S`) és Kéz / mozgatás (`H` vagy `Space` nyomva tartva).
+* **Ecsetmódok és szimmetria:** festés **Fonal + szem**, **Csak fonal** vagy **Csak szem** módban, vízszintes és függőleges tükörtengelyekkel és élő segédvonalakkal — elérhető a nyitott bal sávban, a zárt ikonsávokon és a felső **Menü** lenyílóban is.
 * **Fonalpaletta:** legfeljebb 12 fonal (`A–L`) kör alakú színválasztóval, élő szemszámlálóval és százalékos/méter/gramm becsléssel.
-* **Szemjelek és egyedi szemek:** 13 beépített szemjel (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) plusz egyedi felhasználói szemek (`felhasznál` / `létrehoz` szemszámokkal). A 4-szemes csavarások (`c4f`, `c4b`) tisztán átívelnek a szomszédos cellákon.
+* **Önálló Szemjelek oszlop (Jobb sáv 1):** alapértelmezés szerint egykattintásos jelrácsos ikonsávként indul az alján rögzített **Saját szemjel hozzáadása** gombbal, kinyitva pedig kétoszlopos rácsban kínálja mind a 13 beépített szemjelet (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) és a külön modális ablakban felvehető egyedi felhasználói szemeket (`felhasznál` / `létrehoz` szemszámokkal). A 4-szemes csavarások (`c4f`, `c4b`) tisztán átívelnek a szomszédos cellákon.
 * **Kijelölés és átalakítások:** másolás, kivágás, beillesztés, kitöltés, törlés, vízszintes és függőleges tükrözés (a dőlésirányú fogyasztások és csavarások automatikus cseréjével: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), valamint Undo/Redo előzmény.
 * **Kitöltő generátorok és motívum-bélyegzők (`Kitöltés és bélyegzők` fiók):**
   * Beépített tyúkláb, vízszintes/függőleges csíkok, sakktábla, cikkcakk és rombusz generátorok.
   * Tetszőleges kijelölés mentése újrahasználható motívum-bélyegzőként, lehelyezés előtt élő áttetsző előnézettel a kurzor alatt.
 * **Parancspaletta (`Ctrl/Cmd + K`) és kurzor-HUD:** kereshető gyorsparancs-indító és élő sor/szem koordináta-kijelző a kurzor mellett.
 
-#### 2. Jobb oldali vizsgálópanel
-* **Egysoros állapotcsík:** egy pillantásra összegzi a szemszám-hibákat, a hosszú lebegőszál-figyelmeztetéseket, a rács méretét és az aktív sor leírását.
-* **Élő szöveg fül:** valós idejű szöveges sorleírások a rácshoz szinkronizálva; bármely sorra kattintva odaugrik a kurzor, másolható vagy `.txt` fájlként exportálható, illetve szövegből vissza is olvasható a rácsra.
+#### 2. Jobb oldali vizsgálópanel (Jobb sáv 2)
+* **Kompakt zárt ikonsáv (`60px`):** megjeleníti az élő állapotszimbólumot, az **Élő szöveg / Ellenőrzés / Jelmagyarázat** közvetlen ugróikonjait, a kattintható **Tükör (vízszintes/függőleges)** és **Ecsetmód** állapotikonokat, valamint az alján rögzített **Rácsszerkesztő** indítóikont.
+* **Egysoros állapotcsík:** kinyitva egy pillantásra összegzi a szemszám-hibákat, a hosszú lebegőszál-figyelmeztetéseket, a rács méretét és az aktív sor leírását.
+* **Élő szöveg fül és önálló Rácsszerkesztő ablak:** valós idejű szöveges sorleírások a rácshoz szinkronizálva; bármely sorra kattintva odaugrik a kurzor, másolható vagy `.txt` fájlként exportálható, a rögzített láblécből, a felső **Menü**ből vagy a parancspalettából megnyitható külön **Rácsszerkesztő** ablakból pedig szövegből vissza is szerkeszthető a rácsra.
 * **Ellenőrzés fül:** soronkénti szemszám-egyensúly táblázat (`felhasznál` és `lesz`), állítható lebegőszál-korlát (`3–20` szem) és többszínű sor figyelmeztetések.
-* **Jelmagyarázat fül és Kiemelő jelölő:** listázza a fonalhasználatot és a használt szemjeleket; bármely fonalra vagy szemre kattintva kiemeli az érintett cellákat a rácson, a többit pedig elhalványítja.
+* **Jelmagyarázat fül és Kiemelő jelölő:** listázza a fonalhasználatot és a használt szemjeleket; bármely fonal- vagy szemsorra kattintva kiemeli az érintett cellákat a rácson, a többit pedig elhalványítja.
 
 #### 3. Kézmentes Kötés mód (`Kötés mód`)
 * **Szerkesztési zár:** megakadályozza a véletlen belerajzolást kötés közben.
