@@ -12,12 +12,15 @@ Browser-based, offline-capable knitting pattern designer and toolkit featuring a
 
 ### Workspace and Visual System
 
-* **Docked Four-Column Studio Shell:** Full-bleed responsive workspace combining a collapsible left **Tools** dock, central drafting canvas, and two independent right docks (**Stitch Symbols** and **Studio Inspector**) that both start **closed as compact icon rails** by default so the chart stays front and center.
-* **Top Workspace Menu and Quick Rails:** A **Menu** dropdown in the top workspace bar keeps **Add custom stitch**, **Grid editor**, **Fills and Stamps**, **Pattern, Size and Export**, **Brush mode**, **Mirror H/V**, and panel toggles reachable even when every sidebar is collapsed. Closed icon rails also display clickable icons for **Mirror H/V** axes and **Brush modes** (`Yarn + stitch`, `Yarn only`, `Stitch only`), active stitch glyphs, health status, and pinned modal triggers.
-* **Explicit Interactive Affordances:** Collapsible sections display rotating chevron indicators, drawer buttons show directional arrows, modal-opening actions carry external-launch cues, and expandable sidebars include clear open/close handles.
+* **Adaptive Three-Tier Studio Layout:**
+  * **Desktop (`1024px+`):** Full-bleed four-column docked workspace combining a collapsible left **Tools** dock, central drafting canvas, and two independent right docks (**Stitch Symbols** and **Studio Inspector**) that start **closed as compact icon rails** by default so the chart stays front and center.
+  * **Tablet (`768px–1023px`):** Slim docked left and right studio rails (`62px` wide with `44px+` touch targets) providing 1-tap access to drawing tools, brush modes, mirror axes, stylus-only palm rejection, Undo/Redo, fit zoom, Zen mode, and slide-over side sheets.
+  * **Phone (`< 768px`):** Full-viewport `dvh` canvas paired with 5 streamlined draggable floating islands (**Tools and brush**, **Stitches**, **Yarns**, **View and actions**, **Inspector**) and a direct 1-tap **Undo / Redo** capsule kept safely inside `16px` OS edge-swipe margins, plus swipe-down-to-dismiss bottom sheets (`Stitches`, `Yarns`, `Inspector`, `Fills and Stamps`, `Pattern, Size and Export`).
+* **Top Workspace Menu and Quick Rails:** A **Menu** dropdown in the top workspace bar keeps **Add custom stitch**, **Grid editor**, **Fills and Stamps**, **Pattern, Size and Export**, and layout actions reachable even when every sidebar is collapsed (plus **Brush mode**, **Mirror H/V**, and panel toggles on desktop). Closed desktop icon rails also display clickable icons for **Mirror H/V** axes and **Brush modes** (`Yarn + stitch`, `Yarn only`, `Stitch only`), active stitch glyphs, health status, and pinned modal triggers.
+* **Explicit Interactive Affordances:** Collapsible sections display rotating chevron indicators, drawer buttons show directional arrows, modal-opening actions carry external-launch cues, and bottom sheets feature swipeable drag handles.
 * **Monochrome Interface:** Strict black, white, and neutral gray UI surfaces to reduce visual fatigue; color is reserved exclusively for yarn swatches and critical error, warning, or pass indicators.
 * **Light and Pitch-Black Dark Mode:** Subtle dotted drafting stage in light mode, pure black canvas surround in dark mode with shadowless panels.
-* **Zen Mode (`Tab`):** Hides all sidebars with a single keystroke so the chart occupies the full viewport.
+* **Zen Mode (`Tab`):** Hides all sidebars, tablet rails, and floating islands so the chart occupies the full viewport.
 
 ### Key Features
 
@@ -28,11 +31,11 @@ Browser-based, offline-capable knitting pattern designer and toolkit featuring a
 * **Brush Modes and Symmetry:** Paint in **Yarn + stitch**, **Yarn only**, or **Stitch only** mode, with horizontal and vertical mirror axes and live guide lines—accessible in the expanded left dock, on closed left/right icon rails, and in the top **Menu** dropdown.
 * **Yarn Palette:** Up to 12 yarns (`A–L`) with circular color pickers, live stitch counts, and percentage/meter/gram usage estimates.
 * **Dedicated Stitch Symbols Column (Right Dock 1):** Starts collapsed as a single-click symbol glyph strip with a pinned **Add custom stitch** icon at the bottom, and expands into a two-column symbol grid covering all 13 built-in stitches (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) plus custom user-defined stitches (`uses` / `makes` stitch counts via the standalone **Add custom stitch** modal). 4-stitch cables (`c4f`, `c4b`) span cleanly across adjacent cells.
-* **Selection and Transforms:** Copy, cut, paste, fill, clear, horizontal and vertical flip (automatically mirroring directional decreases and cables: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), and Undo/Redo history.
+* **Selection and Transforms:** Copy, cut, paste, fill, clear, horizontal and vertical flip (automatically mirroring directional decreases and cables: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), and Undo/Redo history—rendered in a single-line horizontally scrollable touch action bar on narrow screens.
 * **Fill Generators and Motif Stamps (`Fills and Stamps` drawer):**
   * Built-in houndstooth, horizontal/vertical stripes, checkerboard, zigzag, and diamond generators.
-  * Save any selection as a reusable motif stamp with a live transparent ghost preview on hover before placing.
-* **Command Palette (`Ctrl/Cmd + K`) and Cursor Ghost HUD:** Searchable quick-action launcher and live row/stitch coordinate HUD beside the cursor.
+  * Save any selection as a reusable motif stamp with a live transparent ghost preview on mouse hover or direct tap/cursor placement on touch screens.
+* **Command Palette (`Ctrl/Cmd + K`), Ghost HUD, and Touch Loupe:** Searchable quick-action launcher, live row/stitch coordinate HUD beside the mouse cursor, and an elevated fingertip **Touch Loupe** while actively drawing on touch devices.
 
 #### 2. Right Studio Inspector (Right Dock 2)
 * **Compact Closed Rail (`60px`):** Shows live chart health status, direct **Live Text / Checks / Legend** jump icons, clickable **Mirror H/V** and **Brush mode** state icons, and a pinned **Grid editor** launch icon at the bottom.
@@ -81,6 +84,18 @@ Browser-based, offline-capable knitting pattern designer and toolkit featuring a
 | `Space` / `↑` / `→` *(Knit Mode)* | Advance to next row |
 | `↓` / `←` *(Knit Mode)* | Step back to previous row |
 
+### Touch and Tablet Gestures
+
+| Gesture / Control | Action |
+| :--- | :--- |
+| One-finger drag | Paint, erase, draw shape, or select active cells |
+| Two-finger pinch and move | Smooth zoom and pan (automatically rolls back accidental first-finger dots) |
+| Two-finger tap | Undo (`Visszavonás`) |
+| Three-finger tap | Redo (`Újra`) |
+| **Stylus-only mode** | Finger pans canvas while stylus/pen paints (palm rejection) |
+| Drag floating island *(Phone)* | Reposition control freely within safe screen margins |
+| Swipe down on sheet handle *(Phone)* | Dismiss open bottom sheet |
+
 ### Privacy, Security, and Offline Support
 
 1. **100% Client-Side Processing:** All patterns, projects, and workspace preferences stay locally in your browser's `localStorage`; there is no backend server, user account, or telemetry.
@@ -95,7 +110,8 @@ Browser-based, offline-capable knitting pattern designer and toolkit featuring a
 │   ├── core.ts                    # Types, EN/HU translations, validation, localStorage
 │   ├── knitEngine.ts              # Stitch analysis, canvas renderer, PNG/SVG/PDF export, image import
 │   ├── ui.tsx                     # Reusable studio UI primitives and PWA hooks
-│   ├── DesignerWorkspace.tsx      # Designer workspace, drawers, library, command palette
+│   ├── FloatingIslands.tsx        # Mobile draggable islands and swipe-dismissible touch studio sheets
+│   ├── DesignerWorkspace.tsx      # Designer workspace, tablet rails, drawers, library, command palette
 │   ├── ToolsViews.tsx             # Calculators, templates, projects, reference views
 │   ├── App.tsx                    # Root shell, theme switcher, navigation
 │   ├── main.tsx                   # Application entry point and offline registration
@@ -131,12 +147,15 @@ Böngészőben futó, offline képes kötésminta-tervező és kötészeti segé
 
 ### Kialakítás és munkaterület
 
-* **Dokkolt négyoszlopos stúdiófelület:** szegélytől szegélyig érő reszponzív szerkesztő, amely egy összecsukható bal oldali **Eszközök** sávból, középső rajzvászonból és két független jobb oldali oszlopból (**Szemjelek** és **Vizsgálópanel**) áll; mindkét jobb oldali oszlop alapértelmezetten **zárt ikonsávként** indul, így a minta marad a középpontban.
-* **Felső munkaterület-menü és zárt ikonsávok:** a felső sávban található **Menü** lenyíló menüből zárt oldalsávok mellett is azonnal elérhető a **Saját szemjel hozzáadása**, a **Rácsszerkesztő**, a **Kitöltés és bélyegzők**, a **Minta, méret és export**, az **Ecsetmód**, a **Tükrözés** és a panelek nyitása/zárása. A zárt ikonsávokon közvetlenül láthatók és kapcsolhatók a **Tükör (vízszintes/függőleges)** és **Ecsetmód** (`Fonál + szem`, `Csak fonál`, `Csak szem`) ikonok, az aktív szemjelek, az állapotjelző és az alul rögzített modális ablakindítók.
-* **Egyértelmű interaktív jelzések:** a nyitható szakaszok forgó nyíljelekkel, a fiókgombok irányjelző nyilakkal, a külön ablakban nyíló funkciók kilépőnyíl-jelzéssel, az oldalsávok pedig határozott nyitó/záró fülekkel mutatják a kezelhetőséget.
+* **Három lépcsős adaptív stúdióelrendezés:**
+  * **Asztal (`1024px+`):** szegélytől szegélyig érő négyoszlopos szerkesztő összecsukható bal oldali **Eszközök** sávval, középső rajzvászonnal és két független jobb oldali oszloppal (**Szemjelek** és **Vizsgálópanel**); mindkét jobb oldali oszlop alapértelmezetten **zárt ikonsávként** indul, így a minta marad a középpontban.
+  * **Tablet (`768px–1023px`):** keskeny, dokkolt bal és jobb oldali eszköztárak (`62px` szélesség, `44px+` érintési felületek) egykoppintásos eszközökkel, ecsetmóddal, tükörtengelyekkel, tollmódos tenyérelutasítással, Visszavonás/Újra gombokkal, illesztési nagyítással, Zen móddal és oldalról nyíló fiókokkal.
+  * **Telefon (`< 768px`):** teljes `dvh` magas rajzvászon **5 átlátható, áthelyezhető lebegő szigettel** (**Eszközök és ecset**, **Szemjelek**, **Fonalak**, **Nézet és műveletek**, **Vizsgálópanel**) és egy **közvetlen, 1 koppintásos Visszavonás / Újra kapszulával** a `16px`-es szélső rendszer-gesztussávon belülre igazítva, valamint ujjal lehúzható alsó lapokkal (`Szemjelek`, `Fonalak`, `Vizsgáló`, `Kitöltés és bélyegzők`, `Minta, méret és export`).
+* **Felső munkaterület-menü és zárt ikonsávok:** a felső sávban található **Menü** lenyílóból zárt oldalsávok mellett is elérhető a **Saját szemjel hozzáadása**, a **Rácsszerkesztő**, a **Kitöltés és bélyegzők**, a **Minta, méret és export**, valamint az elrendezési műveletek (asztalon kiegészítve az **Ecsetmód**, **Tükrözés** és panelkapcsolókkal). A zárt asztali ikonsávokon közvetlenül láthatók és kapcsolhatók a **Tükör (vízszintes/függőleges)** és **Ecsetmód** (`Fonál + szem`, `Csak fonál`, `Csak szem`) ikonok, az aktív szemjelek, az állapotjelző és az alul rögzített modális ablakindítók.
+* **Egyértelmű interaktív jelzések:** a nyitható szakaszok forgó nyíljelekkel, a fiókgombok irányjelző nyilakkal, a külön ablakban nyíló funkciók kilépőnyíl-jelzéssel, az alsó lapok pedig lehúzható fogantyúval mutatják a kezelhetőséget.
 * **Monokróm megjelenés:** szigorúan fekete, fehér és semleges szürke felületek a vizuális fáradtság csökkentéséért; szín kizárólag a fonalmintákon, valamint a kritikus hiba-, figyelmeztető és megfelelt jelzéseken jelenik meg.
 * **Világos és tiszta fekete sötét mód:** finom pontrácsos rajzfelület világos módban, tiszta fekete vászonháttér sötét módban, árnyékmentes panelekkel.
-* **Zen mód (`Tab`):** egyetlen billentyűvel elrejti az összes oldalsávot, így a minta a teljes képernyőt elfoglalja.
+* **Zen mód (`Tab`):** elrejti az összes oldalsávot, tabletes sávot és lebegő szigetet, így a minta a teljes képernyőt elfoglalja.
 
 ### Főbb funkciók
 
@@ -147,11 +166,11 @@ Böngészőben futó, offline képes kötésminta-tervező és kötészeti segé
 * **Ecsetmódok és szimmetria:** festés **Fonal + szem**, **Csak fonal** vagy **Csak szem** módban, vízszintes és függőleges tükörtengelyekkel és élő segédvonalakkal — elérhető a nyitott bal sávban, a zárt ikonsávokon és a felső **Menü** lenyílóban is.
 * **Fonalpaletta:** legfeljebb 12 fonal (`A–L`) kör alakú színválasztóval, élő szemszámlálóval és százalékos/méter/gramm becsléssel.
 * **Önálló Szemjelek oszlop (Jobb sáv 1):** alapértelmezés szerint egykattintásos jelrácsos ikonsávként indul az alján rögzített **Saját szemjel hozzáadása** gombbal, kinyitva pedig kétoszlopos rácsban kínálja mind a 13 beépített szemjelet (`k`, `p`, `yo`, `k2tog`, `skp`, `ssk`, `kfb`, `m1`, `sl`, `k3tog`, `cdd`, `c4f`, `c4b`) és a külön modális ablakban felvehető egyedi felhasználói szemeket (`felhasznál` / `létrehoz` szemszámokkal). A 4-szemes csavarások (`c4f`, `c4b`) tisztán átívelnek a szomszédos cellákon.
-* **Kijelölés és átalakítások:** másolás, kivágás, beillesztés, kitöltés, törlés, vízszintes és függőleges tükrözés (a dőlésirányú fogyasztások és csavarások automatikus cseréjével: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), valamint Undo/Redo előzmény.
+* **Kijelölés és átalakítások:** másolás, kivágás, beillesztés, kitöltés, törlés, vízszintes és függőleges tükrözés (a dőlésirányú fogyasztások és csavarások automatikus cseréjével: `k2tog ↔ skp/ssk`, `c4f ↔ c4b`), valamint Undo/Redo előzmény — keskeny kijelzőn egysoros, vízszintesen görgethető érintésbarát sávban.
 * **Kitöltő generátorok és motívum-bélyegzők (`Kitöltés és bélyegzők` fiók):**
   * Beépített tyúkláb, vízszintes/függőleges csíkok, sakktábla, cikkcakk és rombusz generátorok.
-  * Tetszőleges kijelölés mentése újrahasználható motívum-bélyegzőként, lehelyezés előtt élő áttetsző előnézettel a kurzor alatt.
-* **Parancspaletta (`Ctrl/Cmd + K`) és kurzor-HUD:** kereshető gyorsparancs-indító és élő sor/szem koordináta-kijelző a kurzor mellett.
+  * Tetszőleges kijelölés mentése újrahasználható motívum-bélyegzőként, egérnél élő áttetsző előnézettel, érintőképernyőn közvetlen koppintásos vagy kurzorhoz történő letétellel.
+* **Parancspaletta (`Ctrl/Cmd + K`), kurzor-HUD és érintési nagyító:** kereshető gyorsparancs-indító, élő sor/szem koordináta-kijelző egér mellett, valamint az ujjhegy felett megjelenő **érintési nagyító** rajzolás közben érintőeszközökön.
 
 #### 2. Jobb oldali vizsgálópanel (Jobb sáv 2)
 * **Kompakt zárt ikonsáv (`60px`):** megjeleníti az élő állapotszimbólumot, az **Élő szöveg / Ellenőrzés / Jelmagyarázat** közvetlen ugróikonjait, a kattintható **Tükör (vízszintes/függőleges)** és **Ecsetmód** állapotikonokat, valamint az alján rögzített **Rácsszerkesztő** indítóikont.
@@ -200,6 +219,18 @@ Böngészőben futó, offline képes kötésminta-tervező és kötészeti segé
 | `Space` / `↑` / `→` *(Kötés módban)* | Ugrás a következő sorra |
 | `↓` / `←` *(Kötés módban)* | Visszalépés az előző sorra |
 
+### Érintéses és tabletes gesztusok
+
+| Gesztus / Vezérlő | Művelet |
+| :--- | :--- |
+| Egyujjas húzás | Aktív cellák festése, radírozása, alakzatrajzolása vagy kijelölése |
+| Kétujjas csippentés és mozgatás | Folyamatos nagyítás és görgetés (automatikusan visszavonja az első ujj véletlen pöttyét) |
+| Kétujjas koppintás | Visszavonás |
+| Háromujjas koppintás | Újra |
+| **Csak tollal rajzol mód** | Az ujj csak görgeti a vásznat, rajzolni kizárólag a digitális toll tud (tenyérelutasítás) |
+| Lebegő gomb húzása *(Telefon)* | Szabad áthelyezés a képernyő biztonságos margóján belül |
+| Alsó lap lehúzása *(Telefon)* | Nyitott panel bezárása a fogantyúnál fogva |
+
 ### Adatvédelem, biztonság és offline működés
 
 1. **100%-ban kliensoldali feldolgozás:** minden minta, projekt és munkaterület-beállítás helyben, a böngésző `localStorage` tárhelyén marad; nincs háttérszerver, felhasználói fiók vagy telemetria.
@@ -214,7 +245,8 @@ Böngészőben futó, offline képes kötésminta-tervező és kötészeti segé
 │   ├── core.ts                    # Típusok, EN/HU fordítások, validáció, helyi tárolás
 │   ├── knitEngine.ts              # Szemelemzés, vászonrajzoló, PNG/SVG/PDF export, képimport
 │   ├── ui.tsx                     # Újrahasználható stúdió UI-elemek és PWA hookok
-│   ├── DesignerWorkspace.tsx      # Tervező munkaterület, fiókok, könyvtár, parancspaletta
+│   ├── FloatingIslands.tsx        # Mobilos lebegő szigetek és lehúzható érintéses fiókok
+│   ├── DesignerWorkspace.tsx      # Tervező munkaterület, tabletes sávok, fiókok, könyvtár, parancspaletta
 │   ├── ToolsViews.tsx             # Számítások, sablonok, projektek, szótár nézetek
 │   ├── App.tsx                    # Fő keretrendszer, témaváltó, navigáció
 │   ├── main.tsx                   # Alkalmazás belépési pont és offline regisztráció

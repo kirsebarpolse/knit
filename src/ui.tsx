@@ -346,7 +346,7 @@ export const Modal: React.FC<{
     >
       <div
         className={cn(
-          'w-full rounded-kw-lg border border-line-strong bg-surface shadow-kw-lg overflow-hidden flex flex-col',
+          'w-full max-h-[90dvh] rounded-kw-lg border border-line-strong bg-surface shadow-kw-lg overflow-hidden flex flex-col',
           maxWidthClass
         )}
       >
@@ -379,19 +379,19 @@ export const TopBar: React.FC<{
   return (
     <>
       <header className="sticky top-0 z-[var(--kw-z-header)] border-b border-line bg-surface/95 backdrop-blur-md">
-        <div className="flex h-12 w-full items-center justify-between gap-8 px-4 sm:px-5">
+        <div className="flex h-12 w-full items-center justify-between gap-3 lg:gap-8 px-3 sm:px-5">
           <a
             href="#designer"
             onClick={(e) => {
               e.preventDefault();
               onSelectTab('draw');
             }}
-            className="font-display text-[15px] font-bold tracking-tight text-ink whitespace-nowrap shrink-0"
+            className="font-display text-sm lg:text-[15px] font-bold tracking-tight text-ink whitespace-nowrap shrink-0"
           >
             {t.brand}
           </a>
 
-          <nav aria-label="Primary" className="hidden md:flex h-full items-stretch gap-6">
+          <nav aria-label="Primary" className="hidden md:flex h-full items-stretch gap-3.5 lg:gap-6 min-w-0">
             {TAB_ITEMS.map(({ id }) => {
               const active = activeTab === id;
               return (
@@ -401,7 +401,7 @@ export const TopBar: React.FC<{
                   onClick={() => onSelectTab(id)}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'relative inline-flex items-center h-full text-[13px] whitespace-nowrap shrink-0 cursor-pointer',
+                    'relative inline-flex items-center h-full text-xs lg:text-[13px] whitespace-nowrap shrink-0 cursor-pointer',
                     active
                       ? 'text-ink font-semibold after:content-[""] after:absolute after:inset-x-0 after:bottom-0 after:h-[2px] after:bg-ink'
                       : 'text-ink-muted font-medium hover:text-ink'
@@ -511,7 +511,7 @@ export const OfflineIndicator: React.FC<{ lang: Lang }> = ({ lang }) => {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-16 md:bottom-4 left-4 z-[var(--kw-z-toast)] flex items-center gap-2 rounded-kw-md border border-line-strong bg-warning text-warning-fg px-3.5 py-2 text-xs font-semibold shadow-kw-md"
+      className="fixed bottom-16 md:bottom-4 left-3 right-3 sm:right-auto sm:left-4 z-[var(--kw-z-toast)] flex items-center gap-2 rounded-kw-md border border-line-strong bg-warning text-warning-fg px-3.5 py-2 text-xs font-semibold shadow-kw-md"
     >
       <WifiOff className="w-3.5 h-3.5 shrink-0" />
       <span>{lang === 'hu' ? 'Offline mód — Helyben tárolt adatok aktívak' : 'Offline Mode — Running locally from cache'}</span>

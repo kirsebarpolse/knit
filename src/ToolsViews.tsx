@@ -94,7 +94,7 @@ export const CalculatorsView: React.FC<{ gauge: Gauge; lang: Lang }> = ({ gauge,
   const matchedWeight = YARN_WEIGHTS.find((y) => gauge.s >= y.min && gauge.s <= y.max);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:py-8 space-y-6">
       <Card>
         <SectionTitle className="mb-4">{t.calc.sizeTitle}</SectionTitle>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -471,7 +471,7 @@ export const TemplatesView: React.FC<{
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:py-8 space-y-6">
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
           <SectionTitle>{t.tpl.title}</SectionTitle>
@@ -663,7 +663,7 @@ export const ProjectsView: React.FC<{
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:py-8 space-y-6">
       {projects.map((p, pIdx) => (
         <Card key={p.id} className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -820,7 +820,7 @@ export const ReferenceView: React.FC<{ customStitches: CustomStitch[]; lang: Lan
         ];
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+    <div className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:py-8 space-y-6">
       <Card>
         <SectionTitle className="mb-4">{t.ref.howTitle}</SectionTitle>
         <ul className="space-y-3.5 text-base text-ink-secondary leading-relaxed">

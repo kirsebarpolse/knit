@@ -41,6 +41,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  PenTool,
   Pencil,
   Pipette,
   Plus,
@@ -123,6 +124,7 @@ import {
   ToggleButton,
   cn,
 } from './ui';
+import { MobileFloatingStudio, TouchStudioSheet, type SheetId } from './FloatingIslands';
 
 /* ==========================================================================
    Knit Workshop — Designer Workspace, Pattern Library & Image Import
@@ -215,6 +217,12 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const [zoom, setZoom] = useState(1);
   const [activeDrawer, setActiveDrawer] = useState<'pattern' | 'fills' | null>(null);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
+  const [topMenuPos, setTopMenuPos] = useState<{ left: number; top: number; maxHeight: number }>({
+    left: 8,
+    top: 96,
+    maxHeight: 420,
+  });
+  const [islandsResetCounter, setIslandsResetCounter] = useState(0);
   const [customStitchModalOpen, setCustomStitchModalOpen] = useState(false);
   const [gridEditorModalOpen, setGridEditorModalOpen] = useState(false);
   const [gridEditorTab, setGridEditorTab] = useState<'text' | 'size'>('text');
@@ -273,28 +281,58 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
       return false;
     }
   });
+  const [stylusOnly, setStylusOnly] = useState<boolean>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      return Boolean(raw.stylusOnly);
+    } catch {
+      return false;
+    }
+  });
+  const [touchSheet, setTouchSheet] = useState<SheetId | null>(null);
 
   useEffect(() => {
     try {
       localStorage.setItem(
         'kw-workspace-prefs-v1',
-        JSON.stringify({ zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters })
+        JSON.stringify({ zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters, stylusOnly })
       );
     } catch {
       // ignore storage errors
     }
-  }, [zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters]);
+  }, [zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters, stylusOnly]);
 
-  // Close workspace dropdown when clicking outside
+  // Close workspace dropdown when clicking outside & keep dropdown clamped within viewport
   useEffect(() => {
     if (!topMenuOpen) return;
+    const updateMenuPos = () => {
+      const trigger = topMenuRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const menuW = Math.min(272, vw - 16);
+      const left = Math.max(8, Math.min(vw - menuW - 8, rect.right - menuW));
+      const top = Math.min(vh - 140, rect.bottom + 6);
+      const bottomMargin = vw < 768 ? 70 : 16;
+      const maxHeight = Math.max(180, vh - top - bottomMargin);
+      setTopMenuPos({ left, top, maxHeight });
+    };
+    updateMenuPos();
+
     const onPointerDown = (e: PointerEvent) => {
       if (topMenuRef.current && e.target instanceof Node && !topMenuRef.current.contains(e.target)) {
         setTopMenuOpen(false);
       }
     };
     document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', updateMenuPos);
+    window.addEventListener('scroll', updateMenuPos, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('resize', updateMenuPos);
+      window.removeEventListener('scroll', updateMenuPos, true);
+    };
   }, [topMenuOpen]);
 
   // CAD Ergonomics: Spacebar temporary pan, Alt temporary eyedropper, Command Palette, Ghost HUD, Stamp placement, Magic Marker, Knit Cycle Counter
@@ -310,6 +348,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     clientX: number;
     clientY: number;
   } | null>(null);
+  const [touchLoupe, setTouchLoupe] = useState<{
+    r: number;
+    k: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const [drawerDragY, setDrawerDragY] = useState(0);
+  const drawerDragStartYRef = useRef<number | null>(null);
+  const drawerDragStartTimeRef = useRef<number>(0);
   const [dragShapeEnd, setDragShapeEnd] = useState<[number, number] | null>(null);
   const [highlightSym, setHighlightSym] = useState<number | null>(null);
   const [highlightYarn, setHighlightYarn] = useState<number | null>(null);
@@ -451,6 +498,19 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const lastCellRef = useRef<[number, number] | null>(null);
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchBaseRef = useRef<{ dist: number; zoom: number; midX: number; midY: number; sl: number; st: number } | null>(null);
+  const touchStrokeRef = useRef<{
+    baseDoc: KnitDocument;
+    prevUndoLen: number;
+    prevRedo: Snapshot[];
+    pointerId: number;
+    startedAt: number;
+  } | null>(null);
+  const multiTapRef = useRef<{
+    maxCount: number;
+    startedAt: number;
+    moved: boolean;
+    starts: Map<number, { x: number; y: number }>;
+  } | null>(null);
 
   const computeFitZoom = useCallback(() => {
     const el = paperRef.current;
@@ -781,26 +841,58 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (activePointersRef.current.size === 2 && paperRef.current) {
+    if (e.pointerType === 'touch') {
+      if (!multiTapRef.current || activePointersRef.current.size === 1) {
+        multiTapRef.current = {
+          maxCount: activePointersRef.current.size,
+          startedAt: performance.now(),
+          moved: false,
+          starts: new Map([[e.pointerId, { x: e.clientX, y: e.clientY }]]),
+        };
+      } else {
+        multiTapRef.current.maxCount = Math.max(multiTapRef.current.maxCount, activePointersRef.current.size);
+        multiTapRef.current.starts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+    }
+
+    if (activePointersRef.current.size >= 2 && paperRef.current) {
+      // Roll back accidental single-cell dot painted when 1st finger landed milliseconds before 2nd finger
+      if (touchStrokeRef.current && performance.now() - touchStrokeRef.current.startedAt < 450) {
+        const rollback = touchStrokeRef.current;
+        onChangeDoc(rollback.baseDoc);
+        setUndoStack((prev) => prev.slice(0, rollback.prevUndoLen));
+        setRedoStack(rollback.prevRedo);
+      }
+      touchStrokeRef.current = null;
       isDrawingRef.current = false;
+      lastCellRef.current = null;
+      shapeStartRef.current = null;
+      preShapeDocRef.current = null;
+      selAnchorRef.current = null;
+      setDragShapeEnd(null);
+      setTouchLoupe(null);
       panStartRef.current = null;
-      const pts = [...activePointersRef.current.values()];
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      pinchBaseRef.current = {
-        dist: Math.max(10, dist),
-        zoom,
-        midX: (pts[0].x + pts[1].x) / 2,
-        midY: (pts[0].y + pts[1].y) / 2,
-        sl: paperRef.current.scrollLeft,
-        st: paperRef.current.scrollTop,
-      };
+      setIsPanning(false);
+
+      if (activePointersRef.current.size === 2) {
+        const pts = [...activePointersRef.current.values()];
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        pinchBaseRef.current = {
+          dist: Math.max(10, dist),
+          zoom,
+          midX: (pts[0].x + pts[1].x) / 2,
+          midY: (pts[0].y + pts[1].y) / 2,
+          sl: paperRef.current.scrollLeft,
+          st: paperRef.current.scrollTop,
+        };
+      }
       return;
     }
 
     if (knitMode) return;
 
-    // Middle mouse or Hand tool / Space-hold drag-to-pan
-    if ((effectiveTool === 'h' || e.button === 1) && paperRef.current) {
+    // Middle mouse, Hand tool / Space-hold drag-to-pan, OR touch finger when Stylus-only palm-rejection is enabled
+    if ((effectiveTool === 'h' || e.button === 1 || (stylusOnly && e.pointerType === 'touch')) && paperRef.current) {
       e.preventDefault();
       panStartRef.current = {
         x: e.clientX,
@@ -817,12 +909,19 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     if (!cell) return;
     const [r, k] = cell;
     setCursor({ r, k });
-    setHoverHud({ r, k, clientX: e.clientX, clientY: e.clientY });
+    if (e.pointerType !== 'touch') {
+      setHoverHud({ r, k, clientX: e.clientX, clientY: e.clientY });
+      setTouchLoupe(null);
+    } else {
+      setHoverHud(null);
+      setTouchLoupe({ r, k, clientX: e.clientX, clientY: e.clientY });
+    }
 
-    // Live Ghost Stamp placement on click
+    // Live Ghost Stamp placement on click/tap
     if (pendingStamp) {
       placeStampAt(pendingStamp, r, k);
       setPendingStamp(null);
+      setTouchLoupe(null);
       return;
     }
 
@@ -847,6 +946,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     }
 
     if (effectiveTool === 'f') {
+      if (e.pointerType === 'touch') {
+        touchStrokeRef.current = {
+          baseDoc: doc,
+          prevUndoLen: undoStack.length,
+          prevRedo: redoStack,
+          pointerId: e.pointerId,
+          startedAt: performance.now(),
+        };
+      }
       pushUndo(doc);
       const next = floodFillAt(r, k, doc);
       onChangeDoc(next);
@@ -855,6 +963,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     }
 
     if (effectiveTool === 'l' || effectiveTool === 'r') {
+      if (e.pointerType === 'touch') {
+        touchStrokeRef.current = {
+          baseDoc: doc,
+          prevUndoLen: undoStack.length,
+          prevRedo: redoStack,
+          pointerId: e.pointerId,
+          startedAt: performance.now(),
+        };
+      }
       pushUndo(doc);
       preShapeDocRef.current = doc;
       shapeStartRef.current = [r, k];
@@ -868,6 +985,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
       return;
     }
 
+    if (e.pointerType === 'touch') {
+      touchStrokeRef.current = {
+        baseDoc: doc,
+        prevUndoLen: undoStack.length,
+        prevRedo: redoStack,
+        pointerId: e.pointerId,
+        startedAt: performance.now(),
+      };
+    }
     pushUndo(doc);
     isDrawingRef.current = true;
     lastCellRef.current = [r, k];
@@ -883,6 +1009,12 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (activePointersRef.current.has(e.pointerId)) {
       activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (e.pointerType === 'touch' && multiTapRef.current && !multiTapRef.current.moved) {
+      const st = multiTapRef.current.starts.get(e.pointerId);
+      if (st && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 12) {
+        multiTapRef.current.moved = true;
+      }
     }
 
     if (activePointersRef.current.size === 2 && pinchBaseRef.current && paperRef.current) {
@@ -904,11 +1036,16 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     }
 
     const hoverCell = getCellFromPointer(e.clientX, e.clientY);
-    if (!knitMode) {
+    if (!knitMode && e.pointerType !== 'touch') {
       if (hoverCell) {
         setHoverHud({ r: hoverCell[0], k: hoverCell[1], clientX: e.clientX, clientY: e.clientY });
       } else if (!isDrawingRef.current) {
         setHoverHud(null);
+      }
+    } else if (e.pointerType === 'touch') {
+      setHoverHud(null);
+      if (isDrawingRef.current && hoverCell) {
+        setTouchLoupe({ r: hoverCell[0], k: hoverCell[1], clientX: e.clientX, clientY: e.clientY });
       }
     }
 
@@ -972,6 +1109,26 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     activePointersRef.current.delete(e.pointerId);
     if (activePointersRef.current.size < 2) pinchBaseRef.current = null;
+    if (e.pointerType === 'touch') {
+      setHoverHud(null);
+      setTouchLoupe(null);
+      if (touchStrokeRef.current?.pointerId === e.pointerId) {
+        touchStrokeRef.current = null;
+      }
+      if (activePointersRef.current.size === 0 && multiTapRef.current) {
+        const tap = multiTapRef.current;
+        multiTapRef.current = null;
+        if (!knitMode && !tap.moved && performance.now() - tap.startedAt < 320) {
+          if (tap.maxCount === 2) {
+            handleUndo();
+            setStatusMsg(lang === 'hu' ? 'Visszavonva (2 ujjas koppintás)' : 'Undone (2-finger tap)');
+          } else if (tap.maxCount === 3) {
+            handleRedo();
+            setStatusMsg(lang === 'hu' ? 'Újra (3 ujjas koppintás)' : 'Redone (3-finger tap)');
+          }
+        }
+      }
+    }
     panStartRef.current = null;
     setIsPanning(false);
     isDrawingRef.current = false;
@@ -1800,7 +1957,14 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   }, [commandItems, commandQuery]);
 
   return (
-    <div className="w-full min-h-[calc(100vh-49px)] flex flex-col pb-16 md:pb-0">
+    <div
+      className={cn(
+        'w-full flex flex-col',
+        knitMode
+          ? 'min-h-[calc(100dvh-49px)] pb-16 md:pb-0'
+          : 'h-[calc(100dvh-49px)] lg:h-auto lg:min-h-[calc(100vh-49px)] overflow-hidden lg:overflow-visible pb-14 md:pb-0'
+      )}
+    >
       {/* Hidden file inputs kept mounted so triggers work cleanly */}
       <input
         ref={imgFileInputRef}
@@ -1844,9 +2008,39 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         }}
       />
 
-      {/* Unified Figma/Adobe-style Studio Sub-Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-3 sm:px-4 py-1.5">
-        <div className="flex flex-wrap items-center gap-1">
+      {/* Unified Studio Sub-Toolbar (Desktop full controls; Mobile/Tablet ultra-slim single line) */}
+      <div className="shrink-0 flex items-center justify-between gap-2 border-b border-line bg-surface px-3 sm:px-4 py-1.5">
+        {/* Mobile/Tablet (< lg): Active yarn + stitch summary without duplicate buttons */}
+        <div className="flex lg:hidden items-center gap-2 min-w-0">
+          {!knitMode ? (
+            <>
+              <span
+                className="w-6 h-6 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono font-bold text-xs shrink-0"
+                style={{
+                  backgroundColor: brushMode === 's' ? 'transparent' : doc.pal[curYarn],
+                  color: brushMode === 's' ? 'inherit' : contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
+                }}
+              >
+                {brushMode !== 'c' && curSym > 0 ? allStitches[curSym]?.glyph : ''}
+              </span>
+              <span className="text-xs font-medium text-ink-secondary truncate">
+                {brushMode !== 's' ? `${lang === 'hu' ? 'Fonal' : 'Yarn'} ${YARN_LETTERS[curYarn]}` : ''}
+                {brushMode === 'b' ? ' · ' : ''}
+                {brushMode !== 'c' ? (allStitches[curSym]?.code ?? 'k') : ''}
+              </span>
+              <span className="font-mono text-[11px] text-ink-muted tabular-nums shrink-0">
+                {Math.round(zoom * 100)}%
+              </span>
+            </>
+          ) : (
+            <span className="text-xs font-semibold text-ink truncate">
+              {doc.nm} · {doc.trk || 1}/{doc.rows}
+            </span>
+          )}
+        </div>
+
+        {/* Desktop (lg+): Full quick controls */}
+        <div className="hidden lg:flex flex-wrap items-center gap-1">
           {!knitMode && (
             <>
               <Button
@@ -1932,7 +2126,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {!knitMode && (
             <div ref={topMenuRef} className="relative">
               <Button
@@ -1956,7 +2150,12 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 <div
                   role="menu"
                   aria-label={lang === 'hu' ? 'Munkaterület menü' : 'Workspace menu'}
-                  className="absolute right-0 mt-1.5 w-68 rounded-kw-md border border-line-strong bg-surface shadow-kw-lg py-1.5 z-[var(--kw-z-modal)]"
+                  style={{
+                    left: topMenuPos.left,
+                    top: topMenuPos.top,
+                    maxHeight: topMenuPos.maxHeight,
+                  }}
+                  className="fixed w-[min(272px,calc(100vw-16px))] overflow-y-auto rounded-kw-md border border-line-strong bg-surface shadow-kw-lg py-1.5 z-[var(--kw-z-modal)]"
                 >
                   <button
                     type="button"
@@ -2026,9 +2225,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     <ChevronRight className="w-3.5 h-3.5 text-ink-muted shrink-0" />
                   </button>
 
-                  <div className="my-1 border-t border-line" role="separator" />
+                  <div className="hidden lg:block my-1 border-t border-line" role="separator" />
 
-                  <div className="px-3 py-1 text-[11px] font-semibold text-ink-muted">
+                  <div className="hidden lg:block px-3 py-1 text-[11px] font-semibold text-ink-muted">
                     {t.panels.pencil}
                   </div>
                   {(
@@ -2047,7 +2246,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         aria-checked={active}
                         onClick={() => setBrushMode(m)}
                         className={cn(
-                          'w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs cursor-pointer',
+                          'hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs cursor-pointer',
                           active ? 'bg-surface-hover font-semibold text-ink' : 'text-ink-secondary hover:bg-surface-hover hover:text-ink'
                         )}
                       >
@@ -2060,14 +2259,14 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     );
                   })}
 
-                  <div className="my-1 border-t border-line" role="separator" />
+                  <div className="hidden lg:block my-1 border-t border-line" role="separator" />
 
                   <button
                     type="button"
                     role="menuitemcheckbox"
                     aria-checked={symX}
                     onClick={() => setSymX((v) => !v)}
-                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                    className="hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <FlipHorizontal2 className="w-3.5 h-3.5 text-ink-muted shrink-0" />
@@ -2081,7 +2280,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     role="menuitemcheckbox"
                     aria-checked={symY}
                     onClick={() => setSymY((v) => !v)}
-                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                    className="hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <FlipVertical2 className="w-3.5 h-3.5 text-ink-muted shrink-0" />
@@ -2090,7 +2289,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     {symY && <Check className="w-3.5 h-3.5 shrink-0 text-ink" />}
                   </button>
 
-                  <div className="my-1 border-t border-line" role="separator" />
+                  <div className="hidden lg:block my-1 border-t border-line" role="separator" />
 
                   <button
                     type="button"
@@ -2100,7 +2299,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       setLeftCompact((v) => !v);
                       setTopMenuOpen(false);
                     }}
-                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                    className="hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       {leftCompact ? <PanelLeftOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelLeftClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
@@ -2124,7 +2323,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       setSymbolsCompact((v) => !v);
                       setTopMenuOpen(false);
                     }}
-                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                    className="hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       {symbolsCompact ? <PanelRightOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelRightClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
@@ -2148,7 +2347,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       setRightCompact((v) => !v);
                       setTopMenuOpen(false);
                     }}
-                    className="w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                    className="hidden lg:flex w-full items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       {rightCompact ? <PanelRightOpen className="w-3.5 h-3.5 text-ink-muted shrink-0" /> : <PanelRightClose className="w-3.5 h-3.5 text-ink-muted shrink-0" />}
@@ -2161,6 +2360,23 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                           ? 'Jobb vizsgáló bezárása'
                           : 'Close right panel'}
                       </span>
+                    </span>
+                  </button>
+
+                  <div className="md:hidden my-1 border-t border-line" role="separator" />
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIslandsResetCounter((c) => c + 1);
+                      setTopMenuOpen(false);
+                    }}
+                    className="md:hidden w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left text-xs font-medium text-ink hover:bg-surface-hover cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <RotateCcw className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+                      <span>{lang === 'hu' ? 'Lebegő gombok visszaállítása' : 'Reset floating islands'}</span>
                     </span>
                   </button>
                 </div>
@@ -2176,9 +2392,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               setCommandOpen(true);
             }}
             title={lang === 'hu' ? 'Parancspaletta (Ctrl+K)' : 'Command Palette (Ctrl+K)'}
+            className="hidden lg:inline-flex"
           >
             <Command className="w-3.5 h-3.5 shrink-0 text-ink-muted" />
-            <span className="hidden sm:inline font-mono text-[11px] text-ink-muted">Ctrl+K</span>
+            <span className="font-mono text-[11px] text-ink-muted">Ctrl+K</span>
           </Button>
 
           {!knitMode && (
@@ -2188,6 +2405,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 size="sm"
                 aria-pressed={activeDrawer === 'fills'}
                 onClick={() => setActiveDrawer((d) => (d === 'fills' ? null : 'fills'))}
+                className="hidden lg:inline-flex"
               >
                 <PaintBucket className="w-3.5 h-3.5 shrink-0" />
                 <span>{lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}</span>
@@ -2199,6 +2417,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 size="sm"
                 aria-pressed={activeDrawer === 'pattern'}
                 onClick={() => setActiveDrawer((d) => (d === 'pattern' ? null : 'pattern'))}
+                className="hidden lg:inline-flex"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
                 <span>{lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}</span>
@@ -2227,7 +2446,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             {knitMode ? t.toolbar.exitKnitMode : t.toolbar.knitMode}
           </Button>
 
-          <span className="h-4 w-px bg-line mx-0.5 hidden sm:inline-block" aria-hidden="true" />
+          <span className="h-4 w-px bg-line mx-0.5 hidden md:inline-block" aria-hidden="true" />
 
           <Button
             variant="ghost"
@@ -2236,9 +2455,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             aria-pressed={theme === 'dark'}
             title={theme === 'dark' ? t.toolbar.lightMode : t.toolbar.darkMode}
             aria-label={theme === 'dark' ? t.toolbar.lightMode : t.toolbar.darkMode}
+            className="hidden md:inline-flex"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-ink" /> : <Moon className="w-4 h-4 text-ink-muted" />}
-            <span className="hidden sm:inline">{theme === 'dark' ? t.toolbar.lightMode : t.toolbar.darkMode}</span>
+            <span className="hidden xl:inline">{theme === 'dark' ? t.toolbar.lightMode : t.toolbar.darkMode}</span>
           </Button>
 
           <Button
@@ -2247,7 +2467,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             onClick={onToggleLang}
             title={t.toolbar.langTitle}
             aria-label={t.toolbar.langTitle}
-            className="font-mono text-xs"
+            className="hidden md:inline-flex font-mono text-xs"
           >
             {t.toolbar.langLabel}
           </Button>
@@ -2500,13 +2720,98 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         </div>
       )}
 
-      {/* MAIN DOCKED STUDIO WORKSPACE (Left Tools + Center Canvas + Right Stitch Symbols + Right Inspector) */}
-      <div className="flex flex-col lg:flex-row flex-1 items-stretch min-h-0">
-        {/* LEFT STUDIO DOCK: Drawing Tools, Mirror & Brush Mode */}
+      {/* MAIN DOCKED STUDIO WORKSPACE (Desktop 4-column; Tablet docked rails; Phone floating studio) */}
+      <div className="flex flex-row flex-1 items-stretch min-h-0">
+        {/* TABLET LEFT DOCKED STUDIO RAIL (md to < lg, 768px–1023px) */}
+        {!knitMode && !zenMode && (
+          <aside
+            aria-label={lang === 'hu' ? 'Tabletes bal eszköztár' : 'Tablet left toolbar'}
+            className="hidden md:flex lg:hidden order-1 shrink-0 w-[62px] border-r border-line bg-surface sticky top-12 h-[calc(100dvh-97px)] flex-col items-center gap-1.5 py-2 px-1.5 overflow-y-auto"
+          >
+            {toolButtons.map(({ id, icon: Icon, label }) => (
+              <ToggleButton
+                key={`tb-tool-${id}`}
+                layout="tile"
+                tone="accent"
+                pressed={effectiveTool === id}
+                onClick={() => setTool(id)}
+                title={label}
+                aria-label={label}
+                className="w-full min-h-[44px] py-1"
+              >
+                <Icon className="w-4 h-4" />
+              </ToggleButton>
+            ))}
+
+            <div className="w-full border-t border-line pt-1.5 flex flex-col gap-1">
+              <ToggleButton
+                layout="tile"
+                tone="neutral"
+                pressed={brushMode !== 'b'}
+                onClick={() => setBrushMode(brushMode === 'b' ? 'c' : brushMode === 'c' ? 's' : 'b')}
+                title={
+                  brushMode === 'b'
+                    ? t.panels.both
+                    : brushMode === 'c'
+                    ? t.panels.yarnOnly
+                    : t.panels.stitchOnly
+                }
+                aria-label={`${t.panels.pencil}: ${brushMode === 'b' ? t.panels.both : brushMode === 'c' ? t.panels.yarnOnly : t.panels.stitchOnly}`}
+                className="w-full min-h-[44px] py-1"
+              >
+                {brushMode === 'b' ? (
+                  <Layers className="w-4 h-4" />
+                ) : brushMode === 'c' ? (
+                  <Palette className="w-4 h-4" />
+                ) : (
+                  <Type className="w-4 h-4" />
+                )}
+              </ToggleButton>
+
+              <ToggleButton
+                layout="tile"
+                tone="symmetry"
+                pressed={symX}
+                onClick={() => setSymX((v) => !v)}
+                title={symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
+                aria-label={symX ? (lang === 'hu' ? 'Tükör ↔ be' : 'Mirror ↔ on') : lang === 'hu' ? 'Tükör ↔ ki' : 'Mirror ↔ off'}
+                className="w-full min-h-[44px] py-1"
+              >
+                <FlipHorizontal2 className="w-4 h-4" />
+              </ToggleButton>
+
+              <ToggleButton
+                layout="tile"
+                tone="symmetry"
+                pressed={symY}
+                onClick={() => setSymY((v) => !v)}
+                title={symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
+                aria-label={symY ? (lang === 'hu' ? 'Tükör ↕ be' : 'Mirror ↕ on') : lang === 'hu' ? 'Tükör ↕ ki' : 'Mirror ↕ off'}
+                className="w-full min-h-[44px] py-1"
+              >
+                <FlipVertical2 className="w-4 h-4" />
+              </ToggleButton>
+
+              <ToggleButton
+                layout="tile"
+                tone="accent"
+                pressed={stylusOnly}
+                onClick={() => setStylusOnly((v) => !v)}
+                title={lang === 'hu' ? 'Csak tollal rajzol (ujj görget)' : 'Stylus draw only (finger pans)'}
+                aria-label={lang === 'hu' ? 'Csak tollal rajzol' : 'Stylus draw only'}
+                className="w-full min-h-[44px] py-1"
+              >
+                <PenTool className="w-4 h-4" />
+              </ToggleButton>
+            </div>
+          </aside>
+        )}
+
+        {/* LEFT STUDIO DOCK (Desktop lg+ only) */}
         {!knitMode && !zenMode && (
           <aside
             className={cn(
-              'order-2 lg:order-1 shrink-0 border-t lg:border-t-0 lg:border-r border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              'hidden lg:flex order-1 shrink-0 border-r border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex-col overflow-hidden',
               leftCompact ? 'lg:w-[60px]' : 'lg:w-[244px] xl:w-[256px]'
             )}
           >
@@ -2671,11 +2976,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           </aside>
         )}
 
-        {/* CENTER STAGE: Docked Yarn Swatches + Drafting Dot-Grid Canvas */}
-        <div className="order-1 lg:order-2 flex-1 flex flex-col min-w-0">
-          {/* Yarn Color Palette Strip + Magic Marker Quick Filter */}
+        {/* CENTER STAGE: Docked Yarn Swatches (Desktop) + Drafting Dot-Grid Canvas */}
+        <div className="order-1 lg:order-2 flex-1 flex flex-col min-w-0 min-h-0">
+          {/* Yarn Color Palette Strip (Desktop lg+ — on < lg this lives cleanly inside the Yarn floating island) */}
           {!knitMode && (
-            <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
+            <div className="hidden lg:flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
               <div className="flex items-center gap-2 pr-2.5 border-r border-line">
                 <div
                   className="w-7 h-7 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono font-bold text-sm shrink-0"
@@ -2790,8 +3095,8 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-subtle px-3 py-1.5">
               <span className="text-xs font-medium text-ink">
                 {lang === 'hu'
-                  ? `Bélyegző letétele: „${pendingStamp.name}” (${pendingStamp.w}×${pendingStamp.h}) — vidd az egeret a rács fölé és kattints a helyére`
-                  : `Place stamp "${pendingStamp.name}" (${pendingStamp.w}×${pendingStamp.h}) — hover grid and click to place`}
+                  ? `Bélyegző letétele: „${pendingStamp.name}” (${pendingStamp.w}×${pendingStamp.h}) — koppints vagy kattints a rácsra a helyéhez`
+                  : `Place stamp "${pendingStamp.name}" (${pendingStamp.w}×${pendingStamp.h}) — tap or click the grid to place`}
               </span>
               <div className="flex items-center gap-1.5">
                 <Button
@@ -2801,10 +3106,16 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     placeStampAt(pendingStamp, cursor.r, cursor.k);
                     setPendingStamp(null);
                   }}
+                  className="min-h-[42px] md:min-h-[32px]"
                 >
                   {lang === 'hu' ? 'Letétel a kurzorhoz' : 'Place at cursor'}
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setPendingStamp(null)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPendingStamp(null)}
+                  className="min-h-[42px] md:min-h-[32px]"
+                >
                   <X className="w-3.5 h-3.5" />
                   <span>Esc</span>
                 </Button>
@@ -2813,15 +3124,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           )}
 
           {selection && !knitMode && !pendingStamp && (
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface px-3 py-1.5">
-              <span className="text-sm font-bold text-ink mr-2 tabular-nums">
+            <div className="flex flex-nowrap md:flex-wrap items-center gap-1.5 border-b border-line bg-surface px-3 py-1.5 overflow-x-auto">
+              <span className="text-xs sm:text-sm font-bold text-ink mr-1 tabular-nums shrink-0">
                 {selection.k1 - selection.k0 + 1} × {selection.r1 - selection.r0 + 1}
               </span>
-              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('c')} title="Copy (Ctrl+C)">
+              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('c')} title="Copy (Ctrl+C)" className="min-h-[42px] md:min-h-[32px]">
                 <Copy className="w-4 h-4" />
                 {lang === 'hu' ? 'Másolás' : 'Copy'}
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('x')} title="Cut (Ctrl+X)">
+              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('x')} title="Cut (Ctrl+X)" className="min-h-[42px] md:min-h-[32px]">
                 <Scissors className="w-4 h-4" />
                 {lang === 'hu' ? 'Kivágás' : 'Cut'}
               </Button>
@@ -2831,70 +3142,28 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 disabled={!clipboard}
                 onClick={() => runSelectionOp('p')}
                 title="Paste (Ctrl+V)"
+                className="min-h-[42px] md:min-h-[32px]"
               >
                 <ClipboardPaste className="w-4 h-4" />
                 {lang === 'hu' ? 'Beillesztés' : 'Paste'}
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('h')} aria-label={t.size.flipH}>
+              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('h')} aria-label={t.size.flipH} className="min-h-[42px] min-w-[42px] md:min-h-[32px] md:min-w-0">
                 <FlipHorizontal2 className="w-4 h-4" />
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('v')} aria-label="Flip vertical">
+              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('v')} aria-label="Flip vertical" className="min-h-[42px] min-w-[42px] md:min-h-[32px] md:min-w-0">
                 <FlipVertical2 className="w-4 h-4" />
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('f')}>
+              <Button variant="secondary" size="sm" onClick={() => runSelectionOp('f')} className="min-h-[42px] md:min-h-[32px]">
                 <PaintBucket className="w-4 h-4" />
                 {lang === 'hu' ? 'Kitöltés' : 'Fill'}
               </Button>
-              <Button variant="danger" size="sm" onClick={() => runSelectionOp('d')} aria-label="Clear selection">
+              <Button variant="danger" size="sm" onClick={() => runSelectionOp('d')} aria-label="Clear selection" className="min-h-[42px] min-w-[42px] md:min-h-[32px] md:min-w-0">
                 <Trash2 className="w-4 h-4" />
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => setSelection(null)} className="ml-auto">
+              <Button variant="secondary" size="sm" onClick={() => setSelection(null)} className="ml-auto min-h-[42px] md:min-h-[32px]">
                 <X className="w-4 h-4" />
                 <span>Esc</span>
               </Button>
-            </div>
-          )}
-
-          {/* Mobile / Tablet Quick-Access Toolbelt (prevents scrolling down past canvas on small viewports) */}
-          {!knitMode && (
-            <div className="flex lg:hidden items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-2.5 py-1.5">
-              {(['p', 'e', 'h', 's'] as ToolType[]).map((tid) => {
-                const meta = toolButtons.find((x) => x.id === tid)!;
-                const Icon = meta.icon;
-                return (
-                  <button
-                    key={`mob-${tid}`}
-                    type="button"
-                    aria-pressed={effectiveTool === tid}
-                    onClick={() => setTool(tid)}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-kw-sm border text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer',
-                      effectiveTool === tid ? 'border-transparent bg-accent text-accent-fg' : 'border-line bg-surface-subtle text-ink'
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{meta.label}</span>
-                  </button>
-                );
-              })}
-              <span className="h-4 w-px bg-line shrink-0" aria-hidden="true" />
-              {allStitches.slice(0, 6).map((st) => (
-                <button
-                  key={`mob-st-${st.idx}`}
-                  type="button"
-                  aria-pressed={curSym === st.idx}
-                  onClick={() => {
-                    setCurSym(st.idx);
-                    if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
-                  }}
-                  className={cn(
-                    'min-h-[40px] min-w-[40px] px-2 rounded-kw-sm border font-semibold text-xs whitespace-nowrap shrink-0 cursor-pointer',
-                    curSym === st.idx ? 'border-transparent bg-accent text-accent-fg' : 'border-line bg-surface-subtle text-ink'
-                  )}
-                >
-                  {st.glyph} {st.code}
-                </button>
-              ))}
             </div>
           )}
 
@@ -2911,12 +3180,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               }
             }}
             className={cn(
-              'w-full flex-1 overflow-auto kw-stage-bg p-4 sm:p-8',
+              'w-full flex-1 min-h-0 overflow-auto kw-stage-bg p-3 sm:p-6 lg:p-8',
               knitMode
-                ? 'max-h-[64vh] min-h-[400px]'
-                : zenMode
-                ? 'h-[calc(100vh-148px)] min-h-[520px]'
-                : 'h-[calc(100vh-148px)] min-h-[500px]'
+                ? 'max-h-[56dvh] min-h-[240px] lg:max-h-[64vh] lg:min-h-[400px]'
+                : 'lg:h-[calc(100vh-148px)] lg:min-h-[500px]'
             )}
           >
             <canvas
@@ -2946,19 +3213,19 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   ? 'touch-pan-x touch-pan-y'
                   : effectiveTool === 'h'
                   ? isPanning
-                    ? 'cursor-grabbing touch-pan-x touch-pan-y'
-                    : 'cursor-grab touch-pan-x touch-pan-y'
+                    ? 'cursor-grabbing touch-none'
+                    : 'cursor-grab touch-none'
                   : 'cursor-crosshair touch-none'
               )}
             />
           </div>
         </div>
 
-        {/* RIGHT COLUMN 1: DEDICATED STITCH SYMBOLS DOCK (Closed by default) */}
+        {/* RIGHT COLUMN 1: DEDICATED STITCH SYMBOLS DOCK (Desktop lg+ only, closed by default) */}
         {!knitMode && !zenMode && (
           <aside
             className={cn(
-              'order-3 shrink-0 border-t lg:border-t-0 lg:border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              'hidden lg:flex order-3 shrink-0 border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex-col overflow-hidden',
               symbolsCompact ? 'lg:w-[60px]' : 'lg:w-[232px] xl:w-[248px]'
             )}
           >
@@ -3106,11 +3373,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           </aside>
         )}
 
-        {/* RIGHT COLUMN 2: STUDIO INSPECTOR (Closed by default) */}
+        {/* RIGHT COLUMN 2: STUDIO INSPECTOR (Desktop lg+ only, closed by default) */}
         {!knitMode && !zenMode && (
           <aside
             className={cn(
-              'order-4 shrink-0 border-t lg:border-t-0 lg:border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex flex-col overflow-hidden',
+              'hidden lg:flex order-4 shrink-0 border-l border-line bg-surface lg:sticky lg:top-12 lg:h-[calc(100vh-97px)] flex-col overflow-hidden',
               rightCompact ? 'lg:w-[60px]' : 'lg:w-[320px] xl:w-[336px]'
             )}
           >
@@ -3670,9 +3937,298 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             )}
           </aside>
         )}
+
+        {/* TABLET RIGHT DOCKED STUDIO RAIL (md to < lg, 768px–1023px) */}
+        {!knitMode && !zenMode && (
+          <aside
+            aria-label={lang === 'hu' ? 'Tabletes jobb eszköztár' : 'Tablet right toolbar'}
+            className="hidden md:flex lg:hidden order-3 shrink-0 w-[62px] border-l border-line bg-surface sticky top-12 h-[calc(100dvh-97px)] flex-col items-center gap-1.5 py-2 px-1.5 overflow-y-auto"
+          >
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={undoStack.length === 0}
+              onClick={handleUndo}
+              title={t.toolbar.undo}
+              aria-label={t.toolbar.undo}
+              className="w-full min-h-[44px]"
+            >
+              <Undo2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={redoStack.length === 0}
+              onClick={handleRedo}
+              title={t.toolbar.redo}
+              aria-label={t.toolbar.redo}
+              className="w-full min-h-[44px]"
+            >
+              <Redo2 className="w-4 h-4" />
+            </Button>
+
+            <div className="w-full border-t border-line pt-1.5 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setTouchSheet((s) => (s === 'stitches' ? null : 'stitches'))}
+                aria-expanded={touchSheet === 'stitches'}
+                aria-label={t.panels.symbols}
+                title={t.panels.symbols}
+                className={cn(
+                  'w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center font-semibold text-base cursor-pointer transition-colors',
+                  touchSheet === 'stitches'
+                    ? 'border-accent-line bg-accent text-accent-fg'
+                    : 'border-line bg-surface-subtle/80 text-ink hover:bg-surface-hover'
+                )}
+              >
+                {(allStitches[curSym] ?? allStitches[0])?.glyph ?? '■'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTouchSheet((s) => (s === 'yarn' ? null : 'yarn'))}
+                aria-expanded={touchSheet === 'yarn'}
+                aria-label={t.panels.yarns}
+                title={t.panels.yarns}
+                className={cn(
+                  'w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                  touchSheet === 'yarn'
+                    ? 'border-accent-line bg-accent-soft'
+                    : 'border-line bg-surface-subtle/80 hover:bg-surface-hover'
+                )}
+              >
+                <span
+                  className="w-6 h-6 rounded-kw-sm border border-black/25 dark:border-white/30 flex items-center justify-center font-mono text-xs font-bold"
+                  style={{
+                    backgroundColor: doc.pal[curYarn] ?? DEFAULT_PALETTE[0],
+                    color: contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
+                  }}
+                >
+                  {YARN_LETTERS[curYarn]}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTouchSheet((s) => (s === 'inspector' ? null : 'inspector'))}
+                aria-expanded={touchSheet === 'inspector'}
+                aria-label={t.toolbar.rightPanel}
+                title={t.toolbar.rightPanel}
+                className={cn(
+                  'relative w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                  touchSheet === 'inspector'
+                    ? 'border-accent-line bg-accent text-accent-fg'
+                    : 'border-line bg-surface-subtle/80 text-ink hover:bg-surface-hover'
+                )}
+              >
+                {analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 ? (
+                  <AlertTriangle
+                    className={cn('w-4 h-4', analysis.mismatchRows.length > 0 ? 'text-danger' : 'text-warning')}
+                  />
+                ) : (
+                  <ClipboardCheck className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+
+            <div className="w-full border-t border-line pt-1.5 mt-auto flex flex-col gap-1">
+              <ToggleButton
+                layout="tile"
+                tone="neutral"
+                pressed={view === 'k'}
+                onClick={() => setView(view === 'g' ? 'k' : 'g')}
+                title={view === 'g' ? t.toolbar.knitted : t.toolbar.grid}
+                aria-label={view === 'g' ? t.toolbar.knitted : t.toolbar.grid}
+                className="w-full min-h-[44px] py-1"
+              >
+                <Grid className="w-4 h-4" />
+              </ToggleButton>
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={() => setZoom(computeFitZoom())}
+                title={t.toolbar.fit}
+                aria-label={t.toolbar.fit}
+                className="w-full min-h-[44px] text-[11px] font-mono"
+              >
+                {t.toolbar.fit}
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={() => setZenMode(true)}
+                title={lang === 'hu' ? 'Zen mód' : 'Zen mode'}
+                aria-label={lang === 'hu' ? 'Zen mód' : 'Zen mode'}
+                className="w-full min-h-[44px]"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </aside>
+        )}
       </div>
 
-      {/* Cursor-Attached Studio Ghost HUD (Row, Stitch, Drag Size / Stamp Hint) */}
+      {/* PHONE (< 768px) FLOATING ISLANDS + SHARED TOUCH SHEETS (< 1024px) */}
+      {!knitMode && (
+        <>
+          <MobileFloatingStudio
+            doc={doc}
+            onChangeDoc={onChangeDoc}
+            pushUndo={pushUndo}
+            lang={lang}
+            onToggleLang={onToggleLang}
+            theme={theme}
+            onToggleTheme={onToggleTheme}
+            zenMode={zenMode}
+            onToggleZen={() => setZenMode((v) => !v)}
+            stylusOnly={stylusOnly}
+            onToggleStylusOnly={() => setStylusOnly((v) => !v)}
+            toolButtons={toolButtons}
+            effectiveTool={effectiveTool}
+            setTool={setTool}
+            allStitches={allStitches}
+            curSym={curSym}
+            setCurSym={setCurSym}
+            onSelectToolAfterStitchOrYarn={() => {
+              if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
+            }}
+            curYarn={curYarn}
+            setCurYarn={setCurYarn}
+            yarnStats={yarnStats}
+            showYarnLetters={showYarnLetters}
+            onToggleYarnLetters={() => setShowYarnLetters((v) => !v)}
+            brushMode={brushMode}
+            setBrushMode={setBrushMode}
+            symX={symX}
+            onToggleSymX={() => setSymX((v) => !v)}
+            symY={symY}
+            onToggleSymY={() => setSymY((v) => !v)}
+            highlightYarn={highlightYarn}
+            setHighlightYarn={setHighlightYarn}
+            highlightSym={highlightSym}
+            setHighlightSym={setHighlightSym}
+            canUndo={undoStack.length > 0}
+            canRedo={redoStack.length > 0}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            zoom={zoom}
+            setZoom={setZoom}
+            computeFitZoom={computeFitZoom}
+            view={view}
+            setView={setView}
+            analysis={analysis}
+            activeCursorRow={activeCursorRow}
+            activeLiveRow={activeLiveRow}
+            activeRowAnalysis={activeRowAnalysis}
+            livePatternRows={livePatternRows}
+            mismatchSet={mismatchSet}
+            fullLiveText={fullLiveText}
+            floatLimit={floatLimit}
+            setFloatLimit={setFloatLimit}
+            usedLegendStitches={usedLegendStitches}
+            rightTab={rightTab}
+            setRightTab={setRightTab}
+            onJumpToRow={(rowNum) =>
+              setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - rowNum)) }))
+            }
+            onOpenCustomStitch={() => setCustomStitchModalOpen(true)}
+            onOpenGridEditor={() => {
+              if (!instructionsText.trim()) generateRowInstructions();
+              setGridEditorTab('text');
+              setGridEditorModalOpen(true);
+            }}
+            onOpenDrawer={(d) => setActiveDrawer(d)}
+            onOpenCommandPalette={() => {
+              setCommandQuery('');
+              setCommandOpen(true);
+            }}
+            setStatusMsg={setStatusMsg}
+            resetSignal={islandsResetCounter}
+            activeSheet={touchSheet}
+            setActiveSheet={setTouchSheet}
+          />
+
+          <TouchStudioSheet
+            sheet={touchSheet}
+            onClose={() => setTouchSheet(null)}
+            doc={doc}
+            onChangeDoc={onChangeDoc}
+            pushUndo={pushUndo}
+            lang={lang}
+            allStitches={allStitches}
+            curSym={curSym}
+            setCurSym={setCurSym}
+            onSelectToolAfterStitchOrYarn={() => {
+              if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
+            }}
+            curYarn={curYarn}
+            setCurYarn={setCurYarn}
+            yarnStats={yarnStats}
+            showYarnLetters={showYarnLetters}
+            onToggleYarnLetters={() => setShowYarnLetters((v) => !v)}
+            highlightYarn={highlightYarn}
+            setHighlightYarn={setHighlightYarn}
+            highlightSym={highlightSym}
+            setHighlightSym={setHighlightSym}
+            analysis={analysis}
+            activeCursorRow={activeCursorRow}
+            activeLiveRow={activeLiveRow}
+            activeRowAnalysis={activeRowAnalysis}
+            livePatternRows={livePatternRows}
+            mismatchSet={mismatchSet}
+            fullLiveText={fullLiveText}
+            floatLimit={floatLimit}
+            setFloatLimit={setFloatLimit}
+            usedLegendStitches={usedLegendStitches}
+            rightTab={rightTab}
+            setRightTab={setRightTab}
+            onJumpToRow={(rowNum) =>
+              setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - rowNum)) }))
+            }
+            onOpenCustomStitch={() => setCustomStitchModalOpen(true)}
+            onOpenGridEditor={() => {
+              if (!instructionsText.trim()) generateRowInstructions();
+              setGridEditorTab('text');
+              setGridEditorModalOpen(true);
+            }}
+            setStatusMsg={setStatusMsg}
+          />
+        </>
+      )}
+
+      {/* Fingertip Offset Touch Loupe (Only visible while actively dragging a touch stroke) */}
+      {touchLoupe && !knitMode && !activeDrawer && !commandOpen && (
+        <div
+          aria-hidden="true"
+          className="fixed pointer-events-none z-50 flex items-center gap-2 rounded-kw-md border border-line-strong bg-surface/95 backdrop-blur-md shadow-kw-lg px-2.5 py-1.5 font-mono text-xs font-semibold text-ink tabular-nums"
+          style={{
+            left: Math.max(12, Math.min(typeof window !== 'undefined' ? window.innerWidth - 180 : 300, touchLoupe.clientX - 74)),
+            top: Math.max(58, touchLoupe.clientY - 82),
+          }}
+        >
+          <span
+            className="w-5 h-5 rounded-[4px] border border-black/25 dark:border-white/30 flex items-center justify-center text-[11px] font-bold shrink-0"
+            style={{
+              backgroundColor:
+                doc.grid[touchLoupe.r]?.[touchLoupe.k] >= 0
+                  ? doc.pal[doc.grid[touchLoupe.r][touchLoupe.k]] ?? DEFAULT_PALETTE[0]
+                  : 'transparent',
+              color:
+                doc.grid[touchLoupe.r]?.[touchLoupe.k] >= 0
+                  ? contrastInk(doc.pal[doc.grid[touchLoupe.r][touchLoupe.k]] ?? DEFAULT_PALETTE[0])
+                  : 'inherit',
+            }}
+          >
+            {allStitches[doc.sy[touchLoupe.r]?.[touchLoupe.k] ?? 0]?.glyph ?? ''}
+          </span>
+          <span>
+            {lang === 'hu' ? 'Sor' : 'R'} {doc.rows - touchLoupe.r} · {lang === 'hu' ? 'Sz' : 'S'} {doc.cols - touchLoupe.k}
+            {dragDims ? ` (${dragDims.w}×${dragDims.h})` : ''}
+          </span>
+        </div>
+      )}
+
+      {/* Cursor-Attached Studio Ghost HUD (Mouse/Pen Hover) */}
       {hoverHud && !knitMode && !activeDrawer && !commandOpen && (
         <div
           aria-hidden="true"
@@ -3751,7 +4307,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-18 md:bottom-5 right-5 z-[var(--kw-z-toast)] max-w-sm rounded-kw-md border border-line-strong bg-surface shadow-kw-lg px-4 py-2.5 flex items-center gap-3 text-[13px] font-medium text-ink"
+          className="fixed bottom-18 md:bottom-5 left-3 right-3 sm:left-auto sm:right-5 z-[var(--kw-z-toast)] sm:max-w-sm rounded-kw-md border border-line-strong bg-surface shadow-kw-lg px-4 py-2.5 flex items-center gap-3 text-[13px] font-medium text-ink"
         >
           <span className="flex-1 tabular-nums">{statusMsg}</span>
           <button
@@ -3785,18 +4341,63 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           className="fixed inset-0 z-[var(--kw-z-modal)] flex bg-black/50 backdrop-blur-xs"
         >
           {activeDrawer === 'fills' && (
-            <div className="ml-auto w-full max-w-md h-full bg-surface border-l border-line shadow-kw-lg flex flex-col">
-              <div className="sticky top-0 z-10 bg-surface border-b border-line px-5 py-3.5 flex items-center justify-between gap-3">
-                <h2 className="font-display text-base font-semibold text-ink">
-                  {lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}
-                </h2>
-                <Button variant="ghost" size="sm" onClick={() => setActiveDrawer(null)}>
-                  <X className="w-4 h-4" />
-                  <span>{lang === 'hu' ? 'Bezárás' : 'Close'}</span>
-                </Button>
+            <div
+              style={
+                drawerDragY > 0
+                  ? { transform: `translateY(${drawerDragY}px)`, transition: 'none' }
+                  : { transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)' }
+              }
+              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
+            >
+              <div
+                onPointerDown={(e) => {
+                  if (window.innerWidth >= 640 || (e.target as HTMLElement).closest('button')) return;
+                  drawerDragStartYRef.current = e.clientY;
+                  drawerDragStartTimeRef.current = performance.now();
+                  try {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (drawerDragStartYRef.current === null) return;
+                  setDrawerDragY(Math.max(0, e.clientY - drawerDragStartYRef.current));
+                }}
+                onPointerUp={(e) => {
+                  if (drawerDragStartYRef.current === null) return;
+                  const dy = Math.max(0, e.clientY - drawerDragStartYRef.current);
+                  const dt = Math.max(1, performance.now() - drawerDragStartTimeRef.current);
+                  try {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                  } catch {
+                    // ignore
+                  }
+                  drawerDragStartYRef.current = null;
+                  setDrawerDragY(0);
+                  if (dy > 85 || (dy > 32 && dy / dt > 0.45)) setActiveDrawer(null);
+                }}
+                onPointerCancel={() => {
+                  drawerDragStartYRef.current = null;
+                  setDrawerDragY(0);
+                }}
+                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-2xl sm:rounded-none touch-none sm:touch-auto select-none"
+              >
+                <div className="sm:hidden pt-2.5 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
+                  <span className="w-10 h-1.5 rounded-full bg-line-strong" aria-hidden="true" />
+                </div>
+                <div className="px-5 py-3 flex items-center justify-between gap-3">
+                  <h2 className="font-display text-base font-semibold text-ink">
+                    {lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}
+                  </h2>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveDrawer(null)} className="min-h-[38px]">
+                    <X className="w-4 h-4" />
+                    <span>{lang === 'hu' ? 'Bezárás' : 'Close'}</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
                 <CollapsiblePanel title={t.panels.fills} defaultOpen>
                   <div className="mt-3 space-y-2.5 text-sm">
                     <Select compact value={fillType} onChange={(e) => setFillType(e.target.value as typeof fillType)}>
@@ -3912,18 +4513,63 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           )}
 
           {activeDrawer === 'pattern' && (
-            <div className="ml-auto w-full max-w-md h-full bg-surface border-l border-line shadow-kw-lg flex flex-col">
-              <div className="sticky top-0 z-10 bg-surface border-b border-line px-5 py-3.5 flex items-center justify-between gap-3">
-                <h2 className="font-display text-base font-semibold text-ink">
-                  {lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}
-                </h2>
-                <Button variant="ghost" size="sm" onClick={() => setActiveDrawer(null)}>
-                  <X className="w-4 h-4" />
-                  <span>{lang === 'hu' ? 'Bezárás' : 'Close'}</span>
-                </Button>
+            <div
+              style={
+                drawerDragY > 0
+                  ? { transform: `translateY(${drawerDragY}px)`, transition: 'none' }
+                  : { transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)' }
+              }
+              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
+            >
+              <div
+                onPointerDown={(e) => {
+                  if (window.innerWidth >= 640 || (e.target as HTMLElement).closest('button')) return;
+                  drawerDragStartYRef.current = e.clientY;
+                  drawerDragStartTimeRef.current = performance.now();
+                  try {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (drawerDragStartYRef.current === null) return;
+                  setDrawerDragY(Math.max(0, e.clientY - drawerDragStartYRef.current));
+                }}
+                onPointerUp={(e) => {
+                  if (drawerDragStartYRef.current === null) return;
+                  const dy = Math.max(0, e.clientY - drawerDragStartYRef.current);
+                  const dt = Math.max(1, performance.now() - drawerDragStartTimeRef.current);
+                  try {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                  } catch {
+                    // ignore
+                  }
+                  drawerDragStartYRef.current = null;
+                  setDrawerDragY(0);
+                  if (dy > 85 || (dy > 32 && dy / dt > 0.45)) setActiveDrawer(null);
+                }}
+                onPointerCancel={() => {
+                  drawerDragStartYRef.current = null;
+                  setDrawerDragY(0);
+                }}
+                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-2xl sm:rounded-none touch-none sm:touch-auto select-none"
+              >
+                <div className="sm:hidden pt-2.5 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
+                  <span className="w-10 h-1.5 rounded-full bg-line-strong" aria-hidden="true" />
+                </div>
+                <div className="px-5 py-3 flex items-center justify-between gap-3">
+                  <h2 className="font-display text-base font-semibold text-ink">
+                    {lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}
+                  </h2>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveDrawer(null)} className="min-h-[38px]">
+                    <X className="w-4 h-4" />
+                    <span>{lang === 'hu' ? 'Bezárás' : 'Close'}</span>
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
                 <CollapsiblePanel title={t.panels.pattern} defaultOpen>
                   <div className="mt-3 space-y-3 text-sm">
                     <label className="block">
