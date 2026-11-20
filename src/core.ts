@@ -418,18 +418,18 @@ export function tFor(lang: Lang) {
    -------------------------------------------------------------------------- */
 
 export const DEFAULT_PALETTE = [
-  '#5E3F1B',
-  '#B5835A',
-  '#D9B180',
-  '#F3E6CF',
-  '#8C6A47',
-  '#C9A98A',
-  '#E8CFA6',
-  '#7A5C3E',
-  '#3A4D39',
-  '#739072',
-  '#9A3B3B',
-  '#2D4356',
+  '#260E14',
+  '#3F2721',
+  '#6F4638',
+  '#A1805C',
+  '#B9B1AA',
+  '#D7CFB9',
+  '#5A3A31',
+  '#8A674D',
+  '#4B362E',
+  '#C7BEB3',
+  '#7E5747',
+  '#E6DFCE',
 ];
 
 const BUILTIN_STITCH_CODES = ['k', 'p', 'yo', 'k2tog', 'skp', 'ssk', 'kfb', 'm1', 'sl', 'k3tog', 'cdd', 'c4f', 'c4b'];
@@ -639,6 +639,37 @@ function safeSetJSON(key: string, val: unknown): boolean {
   }
 }
 
+const PALETTE_MIGRATION_KEY = 'kw-palette-v4';
+const LEGACY_PALETTE_HEXES = new Set([
+  '#5e3f1b',
+  '#b5835a',
+  '#d9b180',
+  '#f3e6cf',
+  '#8c6a47',
+  '#c9a98a',
+  '#e8cfa6',
+  '#7a5c3e',
+  '#3a4d39',
+  '#739072',
+  '#9a3b3b',
+  '#2d4356',
+  '#8b5e34',
+  '#f5efe6',
+  '#e2d4c0',
+  '#be123c',
+  '#b45309',
+  '#fb7185',
+  '#fbbf24',
+  '#1d4ed8',
+  '#2563eb',
+  '#3b82f6',
+  '#e11d48',
+  '#10b981',
+  '#059669',
+  '#f59e0b',
+  '#d97706',
+]);
+
 export function loadPatternLibrary(): { patterns: KnitDocument[]; activeId: string } {
   const saved = safeGetJSON<unknown[]>(LIB_KEY, []);
   const patterns: KnitDocument[] = [];
@@ -658,6 +689,32 @@ export function loadPatternLibrary(): { patterns: KnitDocument[]; activeId: stri
     const legacyDoc = validDoc(safeGetJSON(LEGACY_DOC_KEY, null), legacyGauge);
     patterns.push(legacyDoc ?? makeSamplePattern());
     safeSetJSON(LIB_KEY, patterns);
+  }
+
+  // Migrate any legacy/AI starter palettes cached in localStorage once
+  let migrated = false;
+  try {
+    if (!localStorage.getItem(PALETTE_MIGRATION_KEY)) {
+      for (let i = 0; i < patterns.length; i++) {
+        const p = patterns[i];
+        const hasLegacy = p.pal.some((hex) => LEGACY_PALETTE_HEXES.has(hex.toLowerCase()));
+        if (hasLegacy || p.nm === 'Wave and Medallion Sample') {
+          patterns[i] = {
+            ...p,
+            pal: p.pal.map((hex, idx) =>
+              LEGACY_PALETTE_HEXES.has(hex.toLowerCase()) || p.nm === 'Wave and Medallion Sample'
+                ? DEFAULT_PALETTE[idx % DEFAULT_PALETTE.length]
+                : hex
+            ),
+          };
+          migrated = true;
+        }
+      }
+      localStorage.setItem(PALETTE_MIGRATION_KEY, '1');
+      if (migrated) safeSetJSON(LIB_KEY, patterns);
+    }
+  } catch {
+    // ignore storage errors
   }
 
   let activeId = localStorage.getItem(ACTIVE_KEY) || patterns[0].id;

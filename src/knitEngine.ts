@@ -77,8 +77,8 @@ const PRINT_DEFAULTS = {
   knitBed: '#EBEBEB',
   accent: '#171717',
   symmetry: '#404040',
-  danger: '#B91C1C',
-  warning: '#D97706',
+  danger: '#002420',
+  warning: '#0D3D37',
   canvas: '#F4F4F5',
   labelInk: '#000000',
   gridSvg: '#525252',
@@ -144,7 +144,7 @@ export function resolveChartTheme(mode: 'screen' | 'print' = 'screen'): ChartThe
       completedDimOverlay: colorWithAlpha(PRINT_DEFAULTS.canvas, 0.62, 'rgba(244, 244, 245, 0.62)'),
       symmetryGuide: PRINT_DEFAULTS.symmetry,
       floatBadge: PRINT_DEFAULTS.warning,
-      mismatchRowBg: colorWithAlpha(danger, 0.16, 'rgba(185, 28, 28, 0.16)'),
+      mismatchRowBg: colorWithAlpha(danger, 0.16, 'rgba(38, 14, 20, 0.16)'),
       mismatchBadge: danger,
       trackerFill: colorWithAlpha(accent, 0.14, 'rgba(23, 23, 23, 0.14)'),
       trackerStroke: accent,
@@ -162,8 +162,8 @@ export function resolveChartTheme(mode: 'screen' | 'print' = 'screen'): ChartThe
   const knittedBedBg = readCssToken('--kw-knit-bed', '#EBEBEB');
   const paperAccent = '#000000';
   const paperSymmetry = '#404040';
-  const danger = readCssToken('--kw-danger', '#BE123C');
-  const warning = readCssToken('--kw-warning', '#B45309');
+  const danger = '#002420';
+  const warning = '#0D3D37';
 
   return {
     paperBg,
@@ -178,7 +178,7 @@ export function resolveChartTheme(mode: 'screen' | 'print' = 'screen'): ChartThe
     completedDimOverlay: 'rgba(255, 255, 255, 0.65)',
     symmetryGuide: paperSymmetry,
     floatBadge: warning,
-    mismatchRowBg: colorWithAlpha(danger, 0.16, 'rgba(190, 18, 60, 0.16)'),
+    mismatchRowBg: colorWithAlpha(danger, 0.16, 'rgba(38, 14, 20, 0.16)'),
     mismatchBadge: danger,
     trackerFill: 'rgba(0, 0, 0, 0.14)',
     trackerStroke: paperAccent,
@@ -1795,7 +1795,7 @@ export function quantizeMedianCut(rgbaData: Uint8ClampedArray, targetCount: numb
     if (skipTransparent && rgbaData[i + 3] < 128) continue;
     pixels.push([rgbaData[i], rgbaData[i + 1], rgbaData[i + 2]]);
   }
-  if (pixels.length === 0) return ['#5E3F1B', '#F3E6CF'];
+  if (pixels.length === 0) return ['#260E14', '#D7CFB9'];
 
   const boxes: Array<Array<[number, number, number]>> = [pixels];
   while (boxes.length < targetCount) {

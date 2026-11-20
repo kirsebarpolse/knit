@@ -67,7 +67,7 @@ interface IslandPos {
   y: number;
 }
 
-const STORAGE_KEY = 'kw-mobile-islands-v2';
+const STORAGE_KEY = 'kw-mobile-islands-v3';
 const BTN_SIZE = 46;
 const HISTORY_W = 92;
 const BTN_GAP = 10;
@@ -95,11 +95,45 @@ function clampPos(id: IslandId, pos: IslandPos, vw: number, vh: number): IslandP
   };
 }
 
+function islandsOverlap(aId: IslandId, a: IslandPos, bId: IslandId, b: IslandPos): boolean {
+  const aw = getIslandWidth(aId);
+  const bw = getIslandWidth(bId);
+  return a.x < b.x + bw + 4 && a.x + aw + 4 > b.x && a.y < b.y + BTN_SIZE + 4 && a.y + BTN_SIZE + 4 > b.y;
+}
+
 function buildDefaultPositions(vw: number, vh: number): Record<IslandId, IslandPos> {
   const leftBounds = getSafeViewportBounds('tools', vw, vh);
   const rightBtnBounds = getSafeViewportBounds('inspector', vw, vh);
   const rightHistBounds = getSafeViewportBounds('history', vw, vh);
-  const step = BTN_SIZE + BTN_GAP;
+  const availH = leftBounds.maxY - leftBounds.minY;
+  const step = Math.min(BTN_SIZE + BTN_GAP, Math.max(BTN_SIZE + 4, Math.floor(availH / 2)));
+
+  // If viewport is too short for 3 stacked rows without overlapping, fan islands cleanly horizontally at bottom corners
+  if (availH < BTN_SIZE * 2 + 8) {
+    const hGap = 6;
+    const bottomY = leftBounds.maxY;
+    const upperY = Math.max(leftBounds.minY, bottomY - BTN_SIZE - 6);
+    const useSingleRow = availH < BTN_SIZE + 6;
+    if (useSingleRow) {
+      return {
+        tools: clampPos('tools', { x: EDGE_SAFE_X, y: bottomY }, vw, vh),
+        stitches: clampPos('stitches', { x: EDGE_SAFE_X + BTN_SIZE + hGap, y: bottomY }, vw, vh),
+        yarn: clampPos('yarn', { x: EDGE_SAFE_X + (BTN_SIZE + hGap) * 2, y: bottomY }, vw, vh),
+        inspector: clampPos('inspector', { x: rightBtnBounds.maxX, y: bottomY }, vw, vh),
+        viewZoom: clampPos('viewZoom', { x: rightBtnBounds.maxX - BTN_SIZE - hGap, y: bottomY }, vw, vh),
+        history: clampPos('history', { x: rightHistBounds.maxX, y: Math.max(leftBounds.minY, bottomY - BTN_SIZE - 4) }, vw, vh),
+      };
+    }
+    return {
+      tools: clampPos('tools', { x: EDGE_SAFE_X, y: upperY }, vw, vh),
+      stitches: clampPos('stitches', { x: EDGE_SAFE_X, y: bottomY }, vw, vh),
+      yarn: clampPos('yarn', { x: EDGE_SAFE_X + BTN_SIZE + hGap, y: bottomY }, vw, vh),
+      history: clampPos('history', { x: rightHistBounds.maxX, y: upperY }, vw, vh),
+      viewZoom: clampPos('viewZoom', { x: rightBtnBounds.maxX - BTN_SIZE - hGap, y: bottomY }, vw, vh),
+      inspector: clampPos('inspector', { x: rightBtnBounds.maxX, y: bottomY }, vw, vh),
+    };
+  }
+
   const row2 = Math.max(leftBounds.minY, leftBounds.maxY);
   const row1 = Math.max(leftBounds.minY, row2 - step);
   const row0 = Math.max(leftBounds.minY, row1 - step);
@@ -112,6 +146,23 @@ function buildDefaultPositions(vw: number, vh: number): Record<IslandId, IslandP
     viewZoom: clampPos('viewZoom', { x: rightBtnBounds.maxX, y: row1 }, vw, vh),
     inspector: clampPos('inspector', { x: rightBtnBounds.maxX, y: row2 }, vw, vh),
   };
+}
+
+function deOverlapPositions(
+  candidate: Record<IslandId, IslandPos>,
+  vw: number,
+  vh: number
+): Record<IslandId, IslandPos> {
+  const defaults = buildDefaultPositions(vw, vh);
+  const ids: IslandId[] = ['tools', 'stitches', 'yarn', 'history', 'viewZoom', 'inspector'];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      if (islandsOverlap(ids[i], candidate[ids[i]], ids[j], candidate[ids[j]])) {
+        return defaults;
+      }
+    }
+  }
+  return candidate;
 }
 
 function loadSavedPositions(vw: number, vh: number): Record<IslandId, IslandPos> {
@@ -127,7 +178,7 @@ function loadSavedPositions(vw: number, vh: number): Record<IslandId, IslandPos>
         merged[id] = clampPos(id, p, vw, vh);
       }
     });
-    return merged;
+    return deOverlapPositions(merged, vw, vh);
   } catch {
     return defaults;
   }
@@ -193,6 +244,9 @@ export interface MobileFloatingStudioProps {
   onOpenGridEditor: () => void;
   onOpenDrawer: (drawer: 'fills' | 'pattern') => void;
   onOpenCommandPalette: () => void;
+  onClearPattern: () => void;
+  onEdgeRow: (edge: 'top' | 'bottom', op: 'add' | 'remove') => void;
+  onEdgeCol: (edge: 'left' | 'right', op: 'add' | 'remove') => void;
   setStatusMsg: (msg: string) => void;
   resetSignal: number;
   activeSheet: SheetId | null;
@@ -361,7 +415,7 @@ export const TouchStudioSheet: React.FC<
             ? { transform: `translateY(${dragY}px)`, transition: 'none' }
             : { transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)' }
         }
-        className="fixed inset-x-0 bottom-0 sm:inset-y-0 sm:left-auto sm:right-0 sm:w-full sm:max-w-md z-[var(--kw-z-modal)] bg-surface border-t sm:border-t-0 sm:border-l border-line-strong rounded-t-2xl sm:rounded-none shadow-kw-lg flex flex-col max-h-[82dvh] sm:max-h-none pb-safe"
+        className="fixed inset-x-0 bottom-0 sm:inset-y-0 sm:left-auto sm:right-0 sm:w-full sm:max-w-md z-[var(--kw-z-modal)] bg-surface border-t sm:border-t-0 sm:border-l border-line-strong rounded-t-[10px] sm:rounded-none shadow-kw-lg flex flex-col max-h-[82dvh] sm:max-h-none pb-safe"
       >
         {/* Swipe-Dismissible Grab Handle & Header (< sm) */}
         <div
@@ -413,16 +467,16 @@ export const TouchStudioSheet: React.FC<
                         onClose();
                       }}
                       className={cn(
-                        'flex items-center gap-2.5 min-h-[44px] rounded-kw-sm border px-2 py-1.5 text-left cursor-pointer',
+                        'flex items-center gap-2.5 min-h-[44px] rounded-kw-sm border-0 px-2 py-1.5 text-left cursor-pointer active:translate-y-[1px]',
                         active
-                          ? 'border-transparent bg-accent text-accent-fg font-semibold shadow-kw-sm'
-                          : 'border-line bg-surface-subtle/70 text-ink hover:bg-surface-hover'
+                          ? 'bg-accent text-accent-fg font-semibold shadow-[var(--kw-btn-shadow-primary)]'
+                          : 'bg-surface-subtle/80 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                       )}
                     >
                       <span
                         className={cn(
-                          'w-7 h-7 rounded-[5px] flex items-center justify-center font-semibold text-sm shrink-0',
-                          active ? 'bg-white/20 dark:bg-black/20' : 'bg-surface border border-line'
+                          'w-7 h-7 rounded-[3px] flex items-center justify-center font-semibold text-sm shrink-0',
+                          active ? 'bg-white/20 dark:bg-black/20' : 'bg-surface'
                         )}
                       >
                         {st.glyph}
@@ -443,14 +497,14 @@ export const TouchStudioSheet: React.FC<
                 })}
               </div>
             </div>
-            <div className="shrink-0 border-t border-line bg-surface p-3">
+            <div className="shrink-0 bg-surface px-3 pt-2 pb-3">
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onOpenCustomStitch();
                 }}
-                className="w-full flex items-center justify-between gap-2 min-h-[44px] px-3 py-2 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer"
+                className="w-full flex items-center justify-between gap-2 min-h-[44px] px-3 py-2 rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-semibold text-ink cursor-pointer"
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <PlusCircle className="w-4 h-4 shrink-0 text-ink-muted" />
@@ -465,7 +519,7 @@ export const TouchStudioSheet: React.FC<
         {/* SHEET 2: YARN PALETTE AND A/B LETTERS */}
         {sheet === 'yarn' && (
           <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-3">
-            <div className="flex items-center justify-between gap-2 pb-2 border-b border-line">
+            <div className="flex items-center justify-between gap-2 pb-1">
               <Button
                 variant={showYarnLetters ? 'primary' : 'secondary'}
                 size="sm"
@@ -516,7 +570,7 @@ export const TouchStudioSheet: React.FC<
                       className="flex-1 flex items-center gap-3 min-h-[44px] text-left cursor-pointer"
                     >
                       <span
-                        className="w-7 h-7 rounded-full border border-black/25 dark:border-white/30 flex items-center justify-center font-mono text-xs font-bold shrink-0"
+                        className="w-7 h-7 rounded-full border border-line-strong flex items-center justify-center font-mono text-xs font-bold shrink-0"
                         style={{ backgroundColor: hex, color: contrastInk(hex) }}
                       >
                         {YARN_LETTERS[idx]}
@@ -557,9 +611,9 @@ export const TouchStudioSheet: React.FC<
                           onChangeDoc({ ...doc, pal: nextPal, grid: nextGrid, updatedAt: Date.now() });
                         }}
                         aria-label={`Remove yarn ${YARN_LETTERS[idx]}`}
-                        className="min-w-[44px] min-h-[44px] rounded-kw-sm flex items-center justify-center text-danger hover:bg-danger-bg cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] rounded-kw-sm border-0 bg-danger-surface hover:bg-danger-surface-hover text-white shadow-[var(--kw-btn-shadow-danger)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4 text-white" />
                       </button>
                     )}
                   </div>
@@ -572,7 +626,7 @@ export const TouchStudioSheet: React.FC<
         {/* SHEET 3: STUDIO INSPECTOR */}
         {sheet === 'inspector' && (
           <>
-            <div className="shrink-0 space-y-2.5 px-4 py-3 border-b border-line">
+            <div className="shrink-0 space-y-2.5 px-4 pt-3 pb-2">
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
@@ -610,7 +664,7 @@ export const TouchStudioSheet: React.FC<
               </div>
 
               {activeLiveRow && (
-                <div className="rounded-kw-sm border border-line bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
+                <div className="rounded-kw-sm bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
                   <span className="font-semibold mr-1.5">
                     {lang === 'hu' ? `${activeLiveRow.rowNum}. sor (${activeLiveRow.tag}):` : `R${activeLiveRow.rowNum} (${activeLiveRow.tag}):`}
                   </span>
@@ -685,7 +739,7 @@ export const TouchStudioSheet: React.FC<
                     </div>
                   </div>
 
-                  <div className="rounded-kw-sm border border-line bg-surface-subtle/50 divide-y divide-line font-mono text-xs">
+                  <div className="space-y-1 font-mono text-xs">
                     {livePatternRows.map((item) => {
                       const isActive = item.rowNum === activeCursorRow;
                       const rowMismatch = mismatchSet.has(item.rowNum);
@@ -698,8 +752,8 @@ export const TouchStudioSheet: React.FC<
                             onClose();
                           }}
                           className={cn(
-                            'w-full text-left px-2.5 py-2.5 min-h-[44px] flex items-start gap-2 cursor-pointer',
-                            isActive ? 'bg-accent-soft font-bold text-ink' : 'hover:bg-surface-hover text-ink-secondary',
+                            'w-full rounded-kw-sm text-left px-2.5 py-2.5 min-h-[44px] flex items-start gap-2 cursor-pointer transition-colors',
+                            isActive ? 'bg-accent-soft font-bold text-ink' : 'bg-surface-subtle/60 hover:bg-surface-hover text-ink-secondary',
                             rowMismatch && 'text-danger'
                           )}
                         >
@@ -717,20 +771,23 @@ export const TouchStudioSheet: React.FC<
               {rightTab === 'checks' && (
                 <div className="space-y-2.5">
                   {(analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 || analysis.multiColorRows.length > 0) && (
-                    <Alert tone="warning" className="px-3 py-2.5 text-xs space-y-1">
+                    <Alert
+                      tone={analysis.mismatchRows.length > 0 ? 'danger' : 'warning'}
+                      className="px-3 py-2.5 text-xs space-y-1"
+                    >
                       {analysis.mismatchRows.length > 0 && (
-                        <div className="font-bold text-danger">
+                        <div className="font-bold text-danger-fg">
                           {t.checks.mismatch} {analysis.mismatchRows.join(', ')}
                         </div>
                       )}
                       {analysis.floatRows.length > 0 && (
-                        <div className="text-ink">
+                        <div className="text-danger-fg/90">
                           {t.checks.floatWarn} {analysis.floatRows.slice(0, 8).join(', ')}
                           {analysis.floatRows.length > 8 ? '…' : ''}
                         </div>
                       )}
                       {analysis.multiColorRows.length > 0 && (
-                        <div className="text-ink">
+                        <div className="text-danger-fg/90">
                           {t.checks.colorWarn} {analysis.multiColorRows.slice(0, 8).join(', ')}
                           {analysis.multiColorRows.length > 8 ? '…' : ''}
                         </div>
@@ -738,7 +795,7 @@ export const TouchStudioSheet: React.FC<
                     </Alert>
                   )}
 
-                  <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 border border-line tabular-nums">
+                  <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 tabular-nums">
                     <div className="font-semibold text-ink">
                       {activeRowAnalysis ? (
                         activeRowAnalysis.status === 'mismatch' ? (
@@ -793,9 +850,9 @@ export const TouchStudioSheet: React.FC<
                               className={cn(
                                 'cursor-pointer',
                                 r.status === 'mismatch'
-                                  ? 'bg-danger-bg text-danger font-bold'
+                                  ? 'bg-danger-surface text-danger-fg font-bold'
                                   : r.maxFloat > floatLimit
-                                  ? 'bg-warning-bg text-warning font-semibold'
+                                  ? 'bg-warning-surface text-warning-fg font-semibold'
                                   : isActive
                                   ? 'bg-accent-soft text-ink font-bold'
                                   : 'hover:bg-surface-hover'
@@ -835,15 +892,15 @@ export const TouchStudioSheet: React.FC<
                             aria-pressed={highlighted}
                             onClick={() => setHighlightYarn((prev) => (prev === idx ? null : idx))}
                             className={cn(
-                              'w-full flex items-center justify-between gap-2 min-h-[44px] rounded-kw-sm border px-2.5 py-2 text-xs cursor-pointer tabular-nums',
+                              'w-full flex items-center justify-between gap-2 min-h-[44px] rounded-kw-sm border-0 px-2.5 py-2 text-xs cursor-pointer tabular-nums active:translate-y-[1px]',
                               highlighted
-                                ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                : 'border-line bg-surface-subtle/70 text-ink hover:bg-surface-hover'
+                                ? 'bg-accent-soft font-semibold text-ink shadow-[var(--kw-btn-shadow)]'
+                                : 'bg-surface-subtle/80 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                             )}
                           >
                             <span className="inline-flex items-center gap-2">
                               <span
-                                className="w-5 h-5 rounded-full border border-black/20 dark:border-white/25 flex items-center justify-center font-mono text-[11px] font-bold"
+                                className="w-5 h-5 rounded-full border border-line-strong flex items-center justify-center font-mono text-[11px] font-bold"
                                 style={{ backgroundColor: hex, color: contrastInk(hex) }}
                               >
                                 {YARN_LETTERS[idx]}
@@ -862,7 +919,7 @@ export const TouchStudioSheet: React.FC<
                     </div>
                   </div>
 
-                  <div className="border-t border-line pt-2.5 space-y-1.5">
+                  <div className="pt-3 space-y-1.5">
                     <div className="text-xs font-semibold text-ink-secondary">
                       {lang === 'hu' ? 'Használt szemjelek (koppints a kiemeléshez)' : 'Used stitches (tap to spotlight)'}
                     </div>
@@ -876,13 +933,13 @@ export const TouchStudioSheet: React.FC<
                             aria-pressed={highlighted}
                             onClick={() => setHighlightSym((prev) => (prev === st.idx ? null : st.idx))}
                             className={cn(
-                              'w-full flex items-center gap-2 min-h-[44px] rounded-kw-sm border px-2.5 py-1.5 text-left text-xs cursor-pointer',
+                              'w-full flex items-center gap-2 min-h-[44px] rounded-kw-sm border-0 px-2.5 py-1.5 text-left text-xs cursor-pointer active:translate-y-[1px]',
                               highlighted
-                                ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                : 'border-line bg-surface-subtle/70 text-ink hover:bg-surface-hover'
+                                ? 'bg-accent-soft font-semibold text-ink shadow-[var(--kw-btn-shadow)]'
+                                : 'bg-surface-subtle/80 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                             )}
                           >
-                            <span className="w-6 h-6 rounded-[5px] border border-line bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
+                            <span className="w-6 h-6 rounded-[3px] bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
                               {st.glyph}
                             </span>
                             <span className="font-mono font-semibold shrink-0">{st.code}</span>
@@ -899,14 +956,14 @@ export const TouchStudioSheet: React.FC<
               )}
             </div>
 
-            <div className="shrink-0 border-t border-line bg-surface p-3">
+            <div className="shrink-0 bg-surface px-3 pt-2 pb-3">
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onOpenGridEditor();
                 }}
-                className="w-full flex items-center justify-between gap-2 min-h-[44px] px-3 py-2 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer"
+                className="w-full flex items-center justify-between gap-2 min-h-[44px] px-3 py-2 rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-semibold text-ink cursor-pointer"
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <FileCode2 className="w-4 h-4 shrink-0 text-ink-muted" />
@@ -960,6 +1017,9 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
   analysis,
   onOpenDrawer,
   onOpenCommandPalette,
+  onClearPattern,
+  onEdgeRow,
+  onEdgeCol,
   setStatusMsg,
   resetSignal,
   activeSheet,
@@ -1015,7 +1075,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
         (Object.keys(clamped) as IslandId[]).forEach((id) => {
           clamped[id] = clampPos(id, clamped[id], vw, vh);
         });
-        return clamped;
+        return deOverlapPositions(clamped, vw, vh);
       });
     };
     window.addEventListener('resize', onResize);
@@ -1136,7 +1196,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
           onClick={onToggleZen}
           aria-label={lang === 'hu' ? 'Kilépés a Zen módból' : 'Exit Zen mode'}
           title={lang === 'hu' ? 'Kilépés a Zen módból' : 'Exit Zen mode'}
-          className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-kw-md border border-line-strong bg-surface/95 backdrop-blur-md text-xs font-semibold text-ink shadow-kw-md cursor-pointer"
+          className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-kw-md border-0 bg-surface/95 backdrop-blur-md text-xs font-semibold text-ink shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] cursor-pointer"
         >
           <Minimize2 className="w-4 h-4" />
           <span>{lang === 'hu' ? 'Zen ki' : 'Exit Zen'}</span>
@@ -1201,7 +1261,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
       label: t.panels.yarns,
       renderIcon: () => (
         <span
-          className="w-6 h-6 rounded-kw-sm border border-black/25 dark:border-white/30 flex items-center justify-center font-mono text-xs font-bold"
+          className="w-6 h-6 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono text-xs font-bold"
           style={{
             backgroundColor: doc.pal[curYarn] ?? DEFAULT_PALETTE[0],
             color: contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
@@ -1245,7 +1305,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
         onPointerCancel={(e) => onIslandPointerUpOrCancel('history', e)}
         style={{ left: histPos.x, top: histPos.y, width: HISTORY_W, height: BTN_SIZE }}
         className={cn(
-          'fixed z-30 rounded-kw-md border border-line-strong bg-surface/95 backdrop-blur-md shadow-kw-md grid grid-cols-2 divide-x divide-line overflow-hidden touch-none select-none',
+          'fixed z-30 rounded-kw-md border-0 bg-surface/95 backdrop-blur-md shadow-[var(--kw-btn-shadow)] grid grid-cols-2 divide-x divide-line/60 overflow-hidden touch-none select-none',
           draggingId === 'history' && 'scale-105 opacity-90'
         )}
       >
@@ -1301,12 +1361,12 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
             title={label}
             style={{ left: pos.x, top: pos.y, width: BTN_SIZE, height: BTN_SIZE }}
             className={cn(
-              'fixed rounded-kw-md border flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing transition-colors',
+              'fixed rounded-kw-md border-0 flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing active:translate-y-[1px] transition-colors',
               openPopover === id ? 'z-[45]' : 'z-30',
               isDragging && 'scale-105 opacity-90',
               isOpen || activeState
-                ? 'border-accent-line bg-accent text-accent-fg shadow-kw-md'
-                : 'border-line-strong bg-surface/95 backdrop-blur-md text-ink hover:bg-surface-hover shadow-kw-md'
+                ? 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)]'
+                : 'bg-surface/95 backdrop-blur-md text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
             )}
           >
             {renderIcon()}
@@ -1315,7 +1375,11 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                 aria-hidden="true"
                 className={cn(
                   'absolute top-1.5 right-1.5 w-2 h-2 rounded-full',
-                  badgeTone === 'danger' ? 'bg-danger' : badgeTone === 'warning' ? 'bg-warning' : 'bg-ink'
+                  badgeTone === 'danger'
+                    ? 'bg-danger'
+                    : badgeTone === 'warning'
+                    ? 'bg-warning'
+                    : 'bg-ink'
                 )}
               />
             )}
@@ -1449,7 +1513,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                       setHighlightYarn(null);
                       setOpenPopover(null);
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 min-h-[40px] px-2.5 rounded-kw-sm border border-accent-line bg-accent-soft text-xs font-medium text-ink cursor-pointer"
+                    className="w-full flex items-center justify-center gap-1.5 min-h-[40px] px-2.5 rounded-kw-sm border-0 bg-accent-soft shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-medium text-ink cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>{lang === 'hu' ? 'Kiemelés kikapcsolása' : 'Clear spotlight'}</span>
@@ -1518,6 +1582,74 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                 </ToggleButton>
               </SegmentedControl>
 
+              <div className="space-y-1.5 pt-0.5">
+                <div className="text-[11px] font-semibold text-ink-muted flex items-center justify-between">
+                  <span>{lang === 'hu' ? 'Vászon bővítése (4 irány)' : 'Expand canvas (4 directions)'}</span>
+                  <span className="font-mono tabular-nums">{doc.cols} × {doc.rows}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      ['top', lang === 'hu' ? 'Felül (sor)' : 'Top (row)', 'row'],
+                      ['bottom', lang === 'hu' ? 'Alul (sor)' : 'Bottom (row)', 'row'],
+                      ['left', lang === 'hu' ? 'Balra (oszlop)' : 'Left (col)', 'col'],
+                      ['right', lang === 'hu' ? 'Jobbra (oszlop)' : 'Right (col)', 'col'],
+                    ] as const
+                  ).map(([edge, label, kind]) => {
+                    const canAdd = kind === 'row' ? doc.rows < 400 : doc.cols < 300;
+                    const canRemove = kind === 'row' ? doc.rows > 2 : doc.cols > 2;
+                    return (
+                      <div
+                        key={`isl-dir-${edge}`}
+                        className="flex items-center justify-between rounded-kw-sm bg-surface-subtle/75 px-1.5 py-1"
+                      >
+                        <button
+                          type="button"
+                          disabled={!canRemove}
+                          onClick={() =>
+                            kind === 'row'
+                              ? onEdgeRow(edge as 'top' | 'bottom', 'remove')
+                              : onEdgeCol(edge as 'left' | 'right', 'remove')
+                          }
+                          aria-label={`${label} −`}
+                          title={`${label} −`}
+                          className="min-w-[28px] min-h-[32px] rounded-kw-sm border-0 bg-surface flex items-center justify-center font-bold text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] disabled:opacity-35 cursor-pointer"
+                        >
+                          −
+                        </button>
+                        <span className="text-[10px] font-semibold text-ink-secondary truncate px-0.5">{label}</span>
+                        <button
+                          type="button"
+                          disabled={!canAdd}
+                          onClick={() =>
+                            kind === 'row'
+                              ? onEdgeRow(edge as 'top' | 'bottom', 'add')
+                              : onEdgeCol(edge as 'left' | 'right', 'add')
+                          }
+                          aria-label={`${label} +`}
+                          title={`${label} +`}
+                          className="min-w-[28px] min-h-[32px] rounded-kw-sm border-0 bg-surface flex items-center justify-center font-bold text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] disabled:opacity-35 cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Button
+                variant="danger"
+                onClick={() => {
+                  onClearPattern();
+                  setOpenPopover(null);
+                }}
+                className="w-full min-h-[42px] justify-center"
+              >
+                <Trash2 className="w-4 h-4 text-white" />
+                <span>{lang === 'hu' ? 'Minta törlése (tiszta vászon)' : 'Clear pattern (blank canvas)'}</span>
+              </Button>
+
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -1539,7 +1671,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                     setOpenPopover(null);
                     onOpenDrawer('fills');
                   }}
-                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border border-line bg-surface-subtle/75 hover:bg-surface-hover text-xs font-medium text-ink cursor-pointer"
+                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border-0 bg-surface-subtle/85 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-medium text-ink cursor-pointer"
                 >
                   <span>{lang === 'hu' ? 'Kitöltés és bélyegzők' : 'Fills and Stamps'}</span>
                   <ChevronRight className="w-4 h-4 text-ink-muted shrink-0" />
@@ -1551,7 +1683,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                     setOpenPopover(null);
                     onOpenDrawer('pattern');
                   }}
-                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border border-line bg-surface-subtle/75 hover:bg-surface-hover text-xs font-medium text-ink cursor-pointer"
+                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border-0 bg-surface-subtle/85 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-medium text-ink cursor-pointer"
                 >
                   <span>{lang === 'hu' ? 'Minta, méret és export' : 'Pattern, Size and Export'}</span>
                   <ChevronRight className="w-4 h-4 text-ink-muted shrink-0" />
@@ -1563,7 +1695,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                     setOpenPopover(null);
                     onOpenCommandPalette();
                   }}
-                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border border-line bg-surface-subtle/75 hover:bg-surface-hover text-xs font-medium text-ink cursor-pointer"
+                  className="w-full flex items-center justify-between gap-2 min-h-[42px] px-2.5 rounded-kw-sm border-0 bg-surface-subtle/85 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-medium text-ink cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
                     <Command className="w-4 h-4 text-ink-muted shrink-0" />
@@ -1585,7 +1717,7 @@ export const MobileFloatingStudio: React.FC<MobileFloatingStudioProps> = ({
                 <button
                   type="button"
                   onClick={handleResetLayout}
-                  className="w-full flex items-center justify-center gap-1.5 min-h-[40px] px-2.5 rounded-kw-sm border border-line text-xs font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover cursor-pointer"
+                  className="w-full flex items-center justify-center gap-1.5 min-h-[40px] px-2.5 rounded-kw-sm border-0 bg-surface-subtle/75 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] text-xs font-medium text-ink-secondary hover:text-ink cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>{lang === 'hu' ? 'Lebegő gombok visszaállítása' : 'Reset floating islands'}</span>

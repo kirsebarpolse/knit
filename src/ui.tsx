@@ -99,15 +99,15 @@ export function usePWAInstall() {
    -------------------------------------------------------------------------- */
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 rounded-kw-sm border font-medium whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.98]',
+  'inline-flex items-center justify-center gap-1.5 rounded-kw-sm border-0 font-medium whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed active:translate-y-[1px] active:shadow-none',
   {
     variants: {
       variant: {
-        primary: 'border-transparent bg-accent text-accent-fg shadow-kw-sm hover:bg-accent-hover',
-        secondary: 'border-line bg-surface-subtle/85 text-ink hover:bg-surface-hover hover:border-line-strong',
-        danger: 'border-danger-line bg-danger-bg/50 text-danger hover:bg-danger-bg',
-        icon: 'border-transparent bg-transparent text-ink-secondary hover:text-ink hover:bg-surface-hover',
-        ghost: 'border-transparent bg-transparent text-ink-muted hover:text-ink hover:bg-surface-hover',
+        primary: 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)] hover:bg-accent-hover',
+        secondary: 'bg-surface-subtle/90 text-ink shadow-[var(--kw-btn-shadow)] hover:bg-surface-hover',
+        danger: 'bg-danger-surface text-danger-fg shadow-[var(--kw-btn-shadow-danger)] hover:bg-danger-surface-hover',
+        icon: 'bg-transparent text-ink-secondary hover:text-ink hover:bg-surface-hover hover:shadow-[var(--kw-btn-shadow)]',
+        ghost: 'bg-transparent text-ink-muted hover:text-ink hover:bg-surface-hover hover:shadow-[var(--kw-btn-shadow)]',
       },
       size: {
         sm: 'min-h-[32px] px-2.5 py-1 text-xs',
@@ -133,15 +133,15 @@ export const Button: React.FC<ButtonProps> = ({ variant, size, className, type =
 );
 
 const toggleButtonVariants = cva(
-  'inline-flex items-center justify-center cursor-pointer whitespace-nowrap disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.98]',
+  'inline-flex items-center justify-center cursor-pointer whitespace-nowrap border-0 disabled:opacity-35 disabled:cursor-not-allowed active:translate-y-[1px] active:shadow-none',
   {
     variants: {
       layout: {
-        tile: 'flex-col gap-1 rounded-kw-sm border border-transparent bg-transparent px-1.5 py-2 min-h-[46px] text-[11px] font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover',
-        inline: 'gap-1.5 rounded-kw-sm border border-line bg-surface-subtle/85 px-2.5 py-1.5 min-h-[34px] text-xs font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover',
-        panel: 'min-h-[34px] min-w-[34px] rounded-kw-sm border border-line bg-surface-subtle/85 px-2.5 py-1.5 text-xs font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover',
-        row: 'w-full justify-start gap-2 rounded-kw-sm border border-transparent bg-surface-subtle/60 px-2.5 py-1.5 min-h-[36px] text-left text-[13px] font-medium text-ink hover:bg-surface-hover',
-        seg: 'px-2.5 py-1 min-h-[28px] rounded-[4px] text-xs font-medium text-ink-muted hover:text-ink',
+        tile: 'flex-col gap-1 rounded-kw-sm bg-transparent px-1.5 py-2 min-h-[46px] text-[11px] font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover hover:shadow-[var(--kw-btn-shadow)]',
+        inline: 'gap-1.5 rounded-kw-sm bg-surface-subtle/90 px-2.5 py-1.5 min-h-[34px] text-xs font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]',
+        panel: 'min-h-[34px] min-w-[34px] rounded-kw-sm bg-surface-subtle/90 px-2.5 py-1.5 text-xs font-medium text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]',
+        row: 'w-full justify-start gap-2 rounded-kw-sm bg-surface-subtle/75 px-2.5 py-1.5 min-h-[36px] text-left text-[13px] font-medium text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]',
+        seg: 'px-2.5 py-1 min-h-[28px] rounded-[2.5px] text-xs font-medium text-ink-muted hover:text-ink',
       },
       tone: {
         accent: '',
@@ -159,41 +159,41 @@ const toggleButtonVariants = cva(
         tone: 'accent',
         pressed: true,
         layout: 'tile',
-        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-kw-sm',
+        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-[var(--kw-btn-shadow-primary)]',
       },
       {
         tone: 'accent',
         pressed: true,
         layout: 'row',
-        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-kw-sm',
+        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-[var(--kw-btn-shadow-primary)]',
       },
       {
         tone: 'accent',
         pressed: true,
         layout: 'panel',
-        className: 'border-accent-line bg-accent-soft text-ink font-semibold',
+        className: 'bg-accent-soft text-ink font-semibold shadow-[var(--kw-btn-shadow)]',
       },
       {
         tone: 'accent',
         pressed: true,
         layout: 'inline',
-        className: 'border-transparent bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-kw-sm',
+        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-[var(--kw-btn-shadow-primary)]',
       },
       {
         tone: 'symmetry',
         pressed: true,
-        className: 'border-accent-line bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg',
+        className: 'bg-accent text-accent-fg font-semibold hover:bg-accent-hover hover:text-accent-fg shadow-[var(--kw-btn-shadow-primary)]',
       },
       {
         tone: 'success',
         pressed: true,
-        className: 'border-accent-line bg-accent text-accent-fg font-semibold',
+        className: 'bg-accent text-accent-fg font-semibold shadow-[var(--kw-btn-shadow-primary)]',
       },
       {
         tone: 'neutral',
         pressed: true,
         layout: 'seg',
-        className: 'bg-surface dark:bg-surface-hover text-ink font-semibold shadow-kw-sm',
+        className: 'bg-surface dark:bg-surface-hover text-ink font-semibold shadow-[var(--kw-btn-shadow)]',
       },
     ],
     defaultVariants: {
@@ -228,7 +228,7 @@ export const ToggleButton: React.FC<ToggleButtonProps> = ({
 
 export const SegmentedControl: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
   <div
-    className={cn('inline-flex p-0.5 gap-0.5 rounded-kw-sm bg-surface-subtle border border-line', className)}
+    className={cn('inline-flex p-0.5 gap-0.5 rounded-kw-sm bg-surface-subtle', className)}
     {...props}
   />
 );
@@ -277,7 +277,7 @@ export const FieldLabel: React.FC<React.HTMLAttributes<HTMLSpanElement>> = ({ cl
 );
 
 const controlBase =
-  'w-full rounded-kw-sm border border-line bg-surface-subtle/80 text-ink focus:bg-surface focus:border-accent-line transition-colors';
+  'w-full rounded-kw-sm border border-line-strong bg-surface-subtle/80 text-ink focus:bg-surface focus:border-accent-line transition-colors';
 
 export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { compact?: boolean }> = ({
   compact,
@@ -318,10 +318,8 @@ export const Alert: React.FC<React.HTMLAttributes<HTMLDivElement> & { tone?: 'wa
 }) => (
   <div
     className={cn(
-      'rounded-kw-md border px-3.5 py-2.5 text-[13px] font-medium leading-relaxed',
-      tone === 'danger'
-        ? 'border-danger-line bg-danger-bg text-danger'
-        : 'border-warning-line bg-[#FFFBEB] text-[#18181B] dark:bg-warning-bg dark:text-[#FEF3C7]',
+      'rounded-kw-md px-3.5 py-2.5 text-[13px] font-medium leading-relaxed',
+      tone === 'danger' ? 'bg-danger-surface text-danger-fg' : 'bg-warning-surface text-warning-fg',
       className
     )}
     {...props}
@@ -435,12 +433,12 @@ export const TopBar: React.FC<{
                 onClick={() => onSelectTab(id)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-1 cursor-pointer',
+                  'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-0.5 cursor-pointer',
                   active ? 'text-ink font-semibold' : 'text-ink-muted font-medium'
                 )}
               >
                 <Icon className="w-4 h-4" />
-                <span className="text-[11px] leading-tight whitespace-nowrap truncate max-w-full">
+                <span className="text-[10px] sm:text-[11px] leading-tight whitespace-nowrap truncate max-w-full">
                   {t.tabs[id]}
                 </span>
               </button>
@@ -511,7 +509,7 @@ export const OfflineIndicator: React.FC<{ lang: Lang }> = ({ lang }) => {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-16 md:bottom-4 left-3 right-3 sm:right-auto sm:left-4 z-[var(--kw-z-toast)] flex items-center gap-2 rounded-kw-md border border-line-strong bg-warning text-warning-fg px-3.5 py-2 text-xs font-semibold shadow-kw-md"
+      className="fixed bottom-16 md:bottom-4 left-3 right-3 sm:right-auto sm:left-4 z-[var(--kw-z-toast)] flex items-center gap-2 rounded-kw-md bg-danger-surface text-danger-fg px-3.5 py-2 text-xs font-semibold shadow-kw-md"
     >
       <WifiOff className="w-3.5 h-3.5 shrink-0" />
       <span>{lang === 'hu' ? 'Offline mód — Helyben tárolt adatok aktívak' : 'Offline Mode — Running locally from cache'}</span>

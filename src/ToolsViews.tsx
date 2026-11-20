@@ -673,14 +673,14 @@ export const ProjectsView: React.FC<{
               value={p.n}
               aria-label={lang === 'hu' ? 'Projekt neve' : 'Project name'}
               onChange={(e) => updateProject(pIdx, { n: e.target.value })}
-              className="font-display text-lg font-semibold bg-transparent border-b border-transparent focus:border-accent outline-none px-1 py-1 text-ink flex-1 min-w-[180px]"
+              className="font-display text-lg font-semibold bg-transparent rounded-kw-sm border-b border-transparent focus:border-accent-line focus:bg-surface-subtle/60 outline-none px-1.5 py-1 text-ink flex-1 min-w-[180px]"
             />
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={() => addCounter(pIdx)} disabled={p.k.length >= 12}>
                 {t.proj.addCounter}
               </Button>
               <Button variant="danger" onClick={() => deleteProject(pIdx)} aria-label={t.proj.deleteProject}>
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 text-white" />
               </Button>
             </div>
           </div>
@@ -730,13 +730,13 @@ export const ProjectsView: React.FC<{
                   </Button>
                   {p.k.length > 1 && (
                     <Button
-                      variant="icon"
+                      variant="danger"
                       size="icon"
                       onClick={() => removeCounter(pIdx, cIdx)}
                       aria-label={lang === 'hu' ? 'Számláló eltávolítása' : 'Remove counter'}
-                      className="min-h-[44px] min-w-[44px] text-danger border-danger-line"
+                      className="min-h-[44px] min-w-[44px]"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 text-white" />
                     </Button>
                   )}
                 </div>
@@ -805,36 +805,81 @@ export const ReferenceView: React.FC<{ customStitches: CustomStitch[]; lang: Lan
   const guideItems =
     lang === 'hu'
       ? [
-          ['Két réteg (fonal + szemjel)', 'Minden cella tárolja a fonal színét (A–L) és a szemjelet (k, p, yo, c4f stb.). A jel nélküli színes cella sima szem.'],
-          ['Többszemes csavarások (C4F / C4B)', 'A 4-szemes csavarások automatikusan összeolvadnak a rácson és a kötött nézeten is, miközben minden cella megőrzi az 1/1 szemszám-egyensúlyt.'],
-          ['Lebegő szál ellenőrző', 'Többszínű soroknál figyelmeztet, ha egy fonal megszakítás nélkül túl hosszan (alapértelmezetten >5 szem) fut.'],
-          ['Kötés mód és Sorkövető', 'Kapcsold be a Kötés módot, hogy kötés közben véletlenül se rajzolj a mintába, és kövesd a haladást a kész sorok halványításával.'],
-          ['Fekete-fehér PDF és Többoldalas export', 'A fekete-fehér PDF akkor is megőrzi a fonal betűjelét, ha a cellán szemjel is van. Nagy mintákhoz válaszd a többoldalas PDF-et!'],
+          [
+            '1. Hogyan működik a rács?',
+            'Képzeld el a rácsot a kötött darabod térképeként: minden kis négyzet egyetlen szem, a sorok pedig alulról felfelé haladnak — pontosan úgy, ahogy a kezedben kötöd őket.',
+          ],
+          [
+            '2. Szín és szemjel választása',
+            'A vászon feletti sávban (mobilon a fonal gombnál) tudsz fonalat választani vagy új színt keverni. Ha nem választasz külön szemjelet, minden színes négyzet egyszerű sima szemként fog megjelenni.',
+          ],
+          [
+            '3. Rajzolás és javítás',
+            'Kattints vagy húzd végig az ujjad a négyzethálón a festéshez. Ha elrontottál valamit, használd a Visszavonás nyilat (mobilon kétujjas koppintás), a radírt, vagy a felső Törlés gombot. A vászon négy szélén lévő +/− gombokkal bármikor növelheted vagy csökkentheted a sorok és szemek számát.',
+          ],
+          [
+            '4. Kötött előnézet és szemszám-ellenőrzés',
+            'Kapcsold át a nézetet „Kötött kép”-re, ha látni szeretnéd, hogyan mutat majd a minta valódi szemekkel. A jobb oldali vagy alsó Ellenőrzés fül automatikusan szól, ha egy sorban elcsúszik a szemszám, vagy két szín között túl hosszú szál futna a hátoldalon.',
+          ],
+          [
+            '5. Kézmentes Kötés mód',
+            'Ha elkészült a minta és nekikezdesz a kötésnek, kapcsold be a Kötés módot! Ez lezárja a rajzolást (hogy véletlenül se módosítsd a tervet), kiemeli az aktuális sort, elhalványítja a kész részeket, és ébren tartja a képernyőt.',
+          ],
+          [
+            '6. Automatikus mentés és nyomtatás',
+            'A mintáid automatikusan a böngésződben maradnak — internet nélkül és fiók nélkül is. A Menü → Minta, méret és export alatt bármikor letöltheted a kész tervet képként, nyomtatható PDF-ként (akár több A4-es lapra bontva), vagy szöveges sorleírásként.',
+          ],
         ]
       : [
-          ['Two-layer cell model', 'Every cell stores a Yarn (A–L) and a Stitch symbol (k, p, yo, kfb, ssk, c4f, etc.). A colored cell with no symbol equals a plain knit stitch.'],
-          ['Multi-cell cables (C4F / C4B)', '4-stitch cable crossings span visually across 4 contiguous cells while keeping exact 1:1 stitch count balance.'],
-          ['Float and Colorwork Checker', 'Flags rows where a single yarn runs longer than your float limit in stranded work, or where 3+ colors appear in one row.'],
-          ['Knit Mode and Row Tracker', 'Lock canvas editing while you knit, dim completed rows below the active tracker, and keep your screen awake.'],
-          ['Monochrome PDF and Tiled Multi-Page PDF', 'Monochrome PDF preserves yarn letters even on cells that also contain stitch symbols; large charts can be tiled across multiple A4 pages.'],
+          [
+            '1. How the grid works',
+            'Think of the grid as a map of your knitting: each square is a single stitch, and rows are read from bottom to top — just like the fabric grows on your needles.',
+          ],
+          [
+            '2. Picking yarn colors & stitch symbols',
+            'Choose or customize yarn colors in the strip above the canvas (or via the Yarn button on mobile). If you paint with color only and no extra symbol, the cell represents a standard plain knit stitch.',
+          ],
+          [
+            '3. Drawing, fixing mistakes & resizing',
+            'Click or drag across squares to paint. Made a slip? Use Undo (or a two-finger tap on touch screens), the Eraser, or the top Clear button. You can add or remove rows and columns anytime with the +/− controls around the canvas edges.',
+          ],
+          [
+            '4. Realistic preview & automatic checks',
+            'Switch to Knitted view to see your pattern in real stitch proportions. The Checks tab automatically warns you if a row gains or loses stitches unexpectedly, or if a yarn float stretches too far across the back.',
+          ],
+          [
+            '5. Hands-free Knit Mode',
+            'Ready to knit? Turn on Knit Mode to lock the grid against accidental taps, highlight your active row, dim finished rows below it, and keep your screen awake while you work.',
+          ],
+          [
+            '6. Auto-save, offline use & printing',
+            'Everything saves automatically in your browser and works offline with no account needed. Open Menu → Pattern, Size and Export to download an image, printable PDF (including multi-page A4 posters), or plain-text row instructions.',
+          ],
         ];
 
   return (
     <div className="mx-auto max-w-4xl px-4 pt-6 pb-24 md:py-8 space-y-6">
       <Card>
         <SectionTitle className="mb-4">{t.ref.howTitle}</SectionTitle>
-        <ul className="space-y-3.5 text-base text-ink-secondary leading-relaxed">
+        <ol className="space-y-3.5 text-base text-ink-secondary leading-relaxed">
           {guideItems.map(([title, body]) => (
             <li key={title}>
               <strong className="text-ink">{title}:</strong> {body}
             </li>
           ))}
-        </ul>
+        </ol>
       </Card>
 
       <Card>
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <SectionTitle>{t.ref.glossaryTitle}</SectionTitle>
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+          <div className="space-y-1">
+            <SectionTitle>{t.ref.glossaryTitle}</SectionTitle>
+            <p className="text-sm text-ink-muted">
+              {lang === 'hu'
+                ? 'Nem ismered a rövidítéseket? Írj be egy kódot vagy szót (pl. „sima”, „yo”, „csavarás”), és máris látod, mit jelent.'
+                : 'New to knitting abbreviations? Search any code or word (like “knit”, “yo”, or “cable”) to see what it means.'}
+            </p>
+          </div>
           <Input
             type="search"
             value={query}
@@ -857,7 +902,14 @@ export const ReferenceView: React.FC<{ customStitches: CustomStitch[]; lang: Lan
       </Card>
 
       <Card>
-        <SectionTitle className="mb-4">{t.ref.checkerTitle}</SectionTitle>
+        <div className="space-y-1 mb-4">
+          <SectionTitle>{t.ref.checkerTitle}</SectionTitle>
+          <p className="text-sm text-ink-muted">
+            {lang === 'hu'
+              ? 'Írott sor ellenőrzéséhez add meg, hány szemmel indulsz a tűn, majd írd be a sor lépéseit (pl. k2, yo, k2tog).'
+              : 'Test any written row: enter how many stitches start on your needle and type the row steps (e.g. k2, yo, k2tog).'}
+          </p>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block w-36">
             <FieldLabel>{lang === 'hu' ? 'Szemek a tűn' : 'On needle'}</FieldLabel>
@@ -883,9 +935,16 @@ export const ReferenceView: React.FC<{ customStitches: CustomStitch[]; lang: Lan
           </Button>
         </div>
         {checkResult && (
-          <p role="status" className={`mt-3 text-sm font-medium ${checkResult.ok ? 'text-success' : 'text-danger'}`}>
+          <div
+            role="status"
+            className={`mt-3 rounded-kw-sm px-3 py-2 text-sm font-medium ${
+              checkResult.ok
+                ? 'bg-warning-surface text-warning-fg'
+                : 'bg-danger-surface text-danger-fg'
+            }`}
+          >
             {checkResult.msg}
-          </p>
+          </div>
         )}
       </Card>
     </div>

@@ -23,36 +23,43 @@
   --kw-ink-secondary: #3F3F46;
   --kw-ink-muted: #71717A;
 
-  /* Whisper-Thin Architectural Hairlines */
-  --kw-line: #E4E4E7;
-  --kw-line-strong: #D4D4D8;
+  /* WCAG-Compliant Useful Outlines (#121212 Neutral Charcoal) */
+  --kw-line: rgba(18, 18, 18, 0.46);
+  --kw-line-strong: #121212;
 
-  /* Monochrome Interactive Accent + Semantic Error/Warning Only */
+  /* Monochrome Interactive Accent + #002420 Deep Pine-Teal Semantic Error/Status System */
   --kw-accent: #18181B;
   --kw-accent-fg: #FFFFFF;
-  --kw-danger: #BE123C;
-  --kw-warning: #B45309;
-  --kw-warning-fg: #FFFFFF;
-  --kw-success: #18181B;
+  --kw-danger: #002420;
+  --kw-danger-fg: #E8F7F4;
+  --kw-danger-surface: #002420;
+  --kw-danger-surface-hover: #0D3D37;
+  --kw-warning: #0D3D37;
+  --kw-warning-fg: #E8F7F4;
+  --kw-warning-surface: #0D3D37;
+  --kw-success: #14524A;
   --kw-symmetry: #27272A;
 
   --kw-accent-hover: #27272A;
   --kw-accent-soft: rgba(24, 24, 27, 0.07);
-  --kw-accent-line: rgba(24, 24, 27, 0.28);
-  --kw-danger-bg: color-mix(in srgb, var(--kw-danger) 10%, transparent);
-  --kw-danger-line: color-mix(in srgb, var(--kw-danger) 42%, transparent);
-  --kw-warning-bg: color-mix(in srgb, var(--kw-warning) 12%, transparent);
-  --kw-warning-line: color-mix(in srgb, var(--kw-warning) 42%, transparent);
-  --kw-success-bg: rgba(24, 24, 27, 0.07);
+  --kw-accent-line: #121212;
+  --kw-danger-bg: rgba(0, 36, 32, 0.10);
+  --kw-danger-line: rgba(0, 36, 32, 0.55);
+  --kw-warning-bg: rgba(13, 61, 55, 0.14);
+  --kw-warning-line: rgba(13, 61, 55, 0.55);
+  --kw-success-bg: rgba(20, 82, 74, 0.14);
   --kw-symmetry-bg: rgba(24, 24, 27, 0.08);
 
-  /* Modern Studio Radii & Refined Light-Mode Elevation */
-  --kw-radius-sm: 6px;
-  --kw-radius-md: 8px;
-  --kw-radius-lg: 12px;
-  --kw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --kw-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
-  --kw-shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.14);
+  /* Modern Studio Radii (-38% sharper corners) & Subtle <=0.7px Bottom Shading */
+  --kw-radius-sm: 3.75px;
+  --kw-radius-md: 5px;
+  --kw-radius-lg: 7.5px;
+  --kw-shadow-sm: 0 0.7px 0.7px rgba(18, 18, 18, 0.08);
+  --kw-shadow-md: 0 0.7px 0.7px rgba(18, 18, 18, 0.12);
+  --kw-shadow-lg: 0 0.7px 0.7px rgba(18, 18, 18, 0.18);
+  --kw-btn-shadow: 0 0.7px 0 rgba(18, 18, 18, 0.28);
+  --kw-btn-shadow-primary: 0 0.7px 0 rgba(18, 18, 18, 0.55);
+  --kw-btn-shadow-danger: 0 0.7px 0 rgba(18, 18, 18, 0.65);
   --kw-z-header: 30;
   --kw-z-modal: 50;
   --kw-z-toast: 60;
@@ -73,30 +80,37 @@
   --kw-ink-secondary: #D4D4D8;
   --kw-ink-muted: #8E8E93;
 
-  --kw-line: #232327;
-  --kw-line-strong: #323238;
+  --kw-line: #2E2E33;
+  --kw-line-strong: #6E6E77;
 
   --kw-accent: #FAFAFA;
   --kw-accent-fg: #09090B;
   --kw-accent-hover: #E4E4E7;
   --kw-accent-soft: rgba(255, 255, 255, 0.11);
-  --kw-accent-line: rgba(255, 255, 255, 0.28);
+  --kw-accent-line: #A1A1AA;
 
-  --kw-danger: #FB7185;
-  --kw-danger-bg: color-mix(in srgb, #881337 36%, transparent);
-  --kw-danger-line: color-mix(in srgb, #FB7185 45%, transparent);
-  --kw-warning: #FBBF24;
-  --kw-warning-fg: #000000;
-  --kw-warning-bg: color-mix(in srgb, #78350F 32%, transparent);
-  --kw-warning-line: color-mix(in srgb, #FBBF24 42%, transparent);
-  --kw-success: #E4E4E7;
-  --kw-success-bg: rgba(255, 255, 255, 0.11);
+  --kw-danger: #7BD1C2;
+  --kw-danger-fg: #E8F7F4;
+  --kw-danger-surface: #0D3D37;
+  --kw-danger-surface-hover: #14524A;
+  --kw-danger-bg: rgba(123, 209, 194, 0.14);
+  --kw-danger-line: #4CA395;
+  --kw-warning: #62BAAC;
+  --kw-warning-fg: #E8F7F4;
+  --kw-warning-surface: #14524A;
+  --kw-warning-bg: rgba(98, 186, 172, 0.14);
+  --kw-warning-line: #4CA395;
+  --kw-success: #7BD1C2;
+  --kw-success-bg: rgba(123, 209, 194, 0.14);
   --kw-symmetry: #E4E4E7;
   --kw-symmetry-bg: rgba(255, 255, 255, 0.12);
 
   --kw-shadow-sm: none;
   --kw-shadow-md: none;
   --kw-shadow-lg: none;
+  --kw-btn-shadow: 0 0.7px 0 rgba(18, 18, 18, 0.92), inset 0 -0.7px 0 rgba(0, 0, 0, 0.38);
+  --kw-btn-shadow-primary: 0 0.7px 0 rgba(161, 161, 170, 0.55);
+  --kw-btn-shadow-danger: 0 0.7px 0 rgba(18, 18, 18, 0.92);
 }
 
 @theme inline {
@@ -125,10 +139,14 @@
   --color-accent-line: var(--kw-accent-line);
 
   --color-danger: var(--kw-danger);
+  --color-danger-fg: var(--kw-danger-fg);
+  --color-danger-surface: var(--kw-danger-surface);
+  --color-danger-surface-hover: var(--kw-danger-surface-hover);
   --color-danger-bg: var(--kw-danger-bg);
   --color-danger-line: var(--kw-danger-line);
   --color-warning: var(--kw-warning);
   --color-warning-fg: var(--kw-warning-fg);
+  --color-warning-surface: var(--kw-warning-surface);
   --color-warning-bg: var(--kw-warning-bg);
   --color-warning-line: var(--kw-warning-line);
   --color-success: var(--kw-success);

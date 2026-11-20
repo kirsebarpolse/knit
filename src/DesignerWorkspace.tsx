@@ -235,7 +235,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   // Persisted Workspace Layout & Accessibility Preferences
   const [zenMode, setZenMode] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return Boolean(raw.zenMode);
     } catch {
       return false;
@@ -243,15 +243,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   });
   const [leftCompact, setLeftCompact] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
-      return Boolean(raw.leftCompact);
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
+      return raw.leftCompact === undefined ? true : Boolean(raw.leftCompact);
     } catch {
-      return false;
+      return true;
     }
   });
   const [rightCompact, setRightCompact] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return raw.rightCompact === undefined ? true : Boolean(raw.rightCompact);
     } catch {
       return true;
@@ -259,7 +259,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   });
   const [symbolsCompact, setSymbolsCompact] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return raw.symbolsCompact === undefined ? true : Boolean(raw.symbolsCompact);
     } catch {
       return true;
@@ -267,7 +267,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   });
   const [rightTab, setRightTab] = useState<'live' | 'checks' | 'legend'>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return raw.rightTab === 'checks' || raw.rightTab === 'legend' ? raw.rightTab : 'live';
     } catch {
       return 'live';
@@ -275,7 +275,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   });
   const [showYarnLetters, setShowYarnLetters] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return Boolean(raw.showYarnLetters);
     } catch {
       return false;
@@ -283,7 +283,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   });
   const [stylusOnly, setStylusOnly] = useState<boolean>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v1') || '{}');
+      const raw = JSON.parse(localStorage.getItem('kw-workspace-prefs-v2') || '{}');
       return Boolean(raw.stylusOnly);
     } catch {
       return false;
@@ -294,7 +294,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   useEffect(() => {
     try {
       localStorage.setItem(
-        'kw-workspace-prefs-v1',
+        'kw-workspace-prefs-v2',
         JSON.stringify({ zenMode, leftCompact, rightCompact, symbolsCompact, rightTab, showYarnLetters, stylusOnly })
       );
     } catch {
@@ -494,6 +494,8 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const didAutoFitRef = useRef(false);
+  const manualMobileZoomRef = useRef(false);
+  const lastViewportWRef = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const isDrawingRef = useRef(false);
   const lastCellRef = useRef<[number, number] | null>(null);
   const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -514,24 +516,60 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
 
   const computeFitZoom = useCallback(() => {
     const el = paperRef.current;
-    if (!el) return 1.25;
+    if (!el || el.clientWidth < 120 || el.clientHeight < 120) return 0.5;
+    const basePad = el.clientWidth < 640 ? 16 : el.clientWidth < 1024 ? 52 : 68;
+    const edgePad = !knitMode ? 64 : 0;
     const margin = view === 'g' ? CHART_MARGIN : 12;
-    const availW = Math.max(200, el.clientWidth - 28 - margin * 2);
-    const availH = Math.max(200, el.clientHeight - 28 - margin * 2);
+    const availW = Math.max(48, el.clientWidth - basePad - edgePad - margin * 2);
+    const availH = Math.max(48, el.clientHeight - basePad - edgePad - margin * 2);
     const baseCellW = 24;
     const baseCellH = (24 * doc.gauge.s) / doc.gauge.r;
     const zw = availW / (doc.cols * baseCellW);
     const zh = availH / (doc.rows * baseCellH);
-    return Math.max(0.25, Math.min(3.0, Math.min(zw, zh)));
-  }, [doc.cols, doc.rows, doc.gauge.s, doc.gauge.r, view]);
+    return Math.max(4 / 24, Math.min(3.0, Math.min(zw, zh)));
+  }, [doc.cols, doc.rows, doc.gauge.s, doc.gauge.r, view, knitMode]);
 
   useEffect(() => {
     if (didAutoFitRef.current) return;
     didAutoFitRef.current = true;
     const id = window.requestAnimationFrame(() => {
-      setZoom(Math.max(0.85, Math.min(2.0, computeFitZoom())));
+      const fit = computeFitZoom();
+      const isPhone = typeof window !== 'undefined' && window.innerWidth < 768;
+      setZoom(isPhone ? fit : Math.max(0.7, Math.min(1.8, fit)));
     });
     return () => window.cancelAnimationFrame(id);
+  }, [computeFitZoom]);
+
+  // Keep mobile chart canvas continuously fitted when switching patterns, resizing rows/cols, toggling view, or rotating
+  useEffect(() => {
+    manualMobileZoomRef.current = false;
+    if (typeof window === 'undefined' || window.innerWidth >= 768) return;
+    const id = window.requestAnimationFrame(() => {
+      setZoom(computeFitZoom());
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [doc.id, doc.cols, doc.rows, view, knitMode, computeFitZoom]);
+
+  useEffect(() => {
+    const el = paperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (typeof window === 'undefined') return;
+      const vw = window.innerWidth;
+      if (vw < 768) {
+        if (Math.abs(vw - lastViewportWRef.current) > 4) {
+          manualMobileZoomRef.current = false;
+          lastViewportWRef.current = vw;
+        }
+        if (!manualMobileZoomRef.current) {
+          window.requestAnimationFrame(() => {
+            setZoom(computeFitZoom());
+          });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [computeFitZoom]);
 
   useEffect(() => {
@@ -1018,12 +1056,13 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     }
 
     if (activePointersRef.current.size === 2 && pinchBaseRef.current && paperRef.current) {
+      manualMobileZoomRef.current = true;
       const pts = [...activePointersRef.current.values()];
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       const midX = (pts[0].x + pts[1].x) / 2;
       const midY = (pts[0].y + pts[1].y) / 2;
       const scale = dist / pinchBaseRef.current.dist;
-      setZoom(Math.max(0.2, Math.min(3, pinchBaseRef.current.zoom * scale)));
+      setZoom(Math.max(4 / 24, Math.min(3, pinchBaseRef.current.zoom * scale)));
       paperRef.current.scrollLeft = pinchBaseRef.current.sl - (midX - pinchBaseRef.current.midX);
       paperRef.current.scrollTop = pinchBaseRef.current.st - (midY - pinchBaseRef.current.midY);
       return;
@@ -1378,6 +1417,98 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
     const sy = doc.sy.map((row) => row.filter((_, idx) => idx !== at));
     onChangeDoc({ ...doc, cols: doc.cols - 1, grid, sy, updatedAt: Date.now() });
   };
+
+  const handleClearPattern = useCallback(() => {
+    pushUndo(doc);
+    setSelection(null);
+    onChangeDoc({
+      ...doc,
+      grid: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
+      sy: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
+      updatedAt: Date.now(),
+    });
+    setStatusMsg(
+      lang === 'hu'
+        ? 'Minta törölve — tiszta vászon (visszavonható).'
+        : 'Pattern cleared — blank canvas (undoable).'
+    );
+  }, [doc, pushUndo, onChangeDoc, lang]);
+
+  const handleEdgeRow = useCallback(
+    (edge: 'top' | 'bottom', op: 'add' | 'remove') => {
+      if (op === 'add') {
+        if (doc.rows >= 400) return;
+        pushUndo(doc);
+        const nextRows = doc.rows + 1;
+        const blankRow = Array(doc.cols).fill(0);
+        const blankSy = Array(doc.cols).fill(0);
+        const grid = edge === 'top' ? [blankRow, ...doc.grid] : [...doc.grid, blankRow];
+        const sy = edge === 'top' ? [blankSy, ...doc.sy] : [...doc.sy, blankSy];
+        const nextTrk = edge === 'bottom' && doc.trk > 0 ? Math.min(nextRows, doc.trk + 1) : doc.trk;
+        onChangeDoc({ ...doc, rows: nextRows, grid, sy, trk: nextTrk, updatedAt: Date.now() });
+        if (edge === 'top') setCursor((prev) => ({ ...prev, r: Math.min(nextRows - 1, prev.r + 1) }));
+        setStatusMsg(
+          lang === 'hu'
+            ? `${edge === 'top' ? 'Felül' : 'Alul'}: +1 sor (${nextRows} sor)`
+            : `${edge === 'top' ? 'Top' : 'Bottom'}: +1 row (${nextRows} rows)`
+        );
+      } else {
+        if (doc.rows <= 2) return;
+        pushUndo(doc);
+        const nextRows = doc.rows - 1;
+        const grid = edge === 'top' ? doc.grid.slice(1) : doc.grid.slice(0, -1);
+        const sy = edge === 'top' ? doc.sy.slice(1) : doc.sy.slice(0, -1);
+        const nextTrk = edge === 'bottom' && doc.trk > 1 ? doc.trk - 1 : Math.min(doc.trk, nextRows);
+        onChangeDoc({ ...doc, rows: nextRows, grid, sy, trk: nextTrk, updatedAt: Date.now() });
+        setCursor((prev) => ({
+          ...prev,
+          r: Math.max(0, Math.min(nextRows - 1, edge === 'top' ? prev.r - 1 : prev.r)),
+        }));
+        setStatusMsg(
+          lang === 'hu'
+            ? `${edge === 'top' ? 'Felül' : 'Alul'}: −1 sor (${nextRows} sor)`
+            : `${edge === 'top' ? 'Top' : 'Bottom'}: −1 row (${nextRows} rows)`
+        );
+      }
+    },
+    [doc, pushUndo, onChangeDoc, lang]
+  );
+
+  const handleEdgeCol = useCallback(
+    (edge: 'left' | 'right', op: 'add' | 'remove') => {
+      if (op === 'add') {
+        if (doc.cols >= 300) return;
+        pushUndo(doc);
+        const nextCols = doc.cols + 1;
+        const grid = doc.grid.map((row) => (edge === 'left' ? [0, ...row] : [...row, 0]));
+        const sy = doc.sy.map((row) => (edge === 'left' ? [0, ...row] : [...row, 0]));
+        onChangeDoc({ ...doc, cols: nextCols, grid, sy, updatedAt: Date.now() });
+        if (edge === 'left') setCursor((prev) => ({ ...prev, k: Math.min(nextCols - 1, prev.k + 1) }));
+        setStatusMsg(
+          lang === 'hu'
+            ? `${edge === 'left' ? 'Balra' : 'Jobbra'}: +1 oszlop (${nextCols} szem)`
+            : `${edge === 'left' ? 'Left' : 'Right'}: +1 col (${nextCols} sts)`
+        );
+      } else {
+        if (doc.cols <= 2) return;
+        pushUndo(doc);
+        const nextCols = doc.cols - 1;
+        const grid = doc.grid.map((row) => (edge === 'left' ? row.slice(1) : row.slice(0, -1)));
+        const sy = doc.sy.map((row) => (edge === 'left' ? row.slice(1) : row.slice(0, -1)));
+        onChangeDoc({ ...doc, cols: nextCols, grid, sy, updatedAt: Date.now() });
+        setCursor((prev) => ({
+          ...prev,
+          k: Math.max(0, Math.min(nextCols - 1, edge === 'left' ? prev.k - 1 : prev.k)),
+        }));
+        setStatusMsg(
+          lang === 'hu'
+            ? `${edge === 'left' ? 'Balra' : 'Jobbra'}: −1 oszlop (${nextCols} szem)`
+            : `${edge === 'left' ? 'Left' : 'Right'}: −1 col (${nextCols} sts)`
+        );
+      }
+    },
+    [doc, pushUndo, onChangeDoc, lang]
+  );
 
   const handleShift = (dr: number, dk: number) => {
     pushUndo(doc);
@@ -1796,7 +1927,40 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         id: 'fit',
         group: lang === 'hu' ? 'Nézet' : 'View',
         label: lang === 'hu' ? 'Rács igazítása a képernyőhöz' : 'Fit chart to viewport',
-        run: () => setZoom(computeFitZoom()),
+        run: () => {
+          manualMobileZoomRef.current = false;
+          setZoom(computeFitZoom());
+        },
+      },
+      {
+        id: 'clear-pattern',
+        group: lang === 'hu' ? 'Vászon' : 'Canvas',
+        label: lang === 'hu' ? 'Minta törlése (tiszta vászon)' : 'Clear pattern (blank canvas)',
+        run: () => handleClearPattern(),
+      },
+      {
+        id: 'add-row-top',
+        group: lang === 'hu' ? 'Vászon' : 'Canvas',
+        label: lang === 'hu' ? '+1 sor felül' : '+1 row on top',
+        run: () => handleEdgeRow('top', 'add'),
+      },
+      {
+        id: 'add-row-bottom',
+        group: lang === 'hu' ? 'Vászon' : 'Canvas',
+        label: lang === 'hu' ? '+1 sor alul' : '+1 row on bottom',
+        run: () => handleEdgeRow('bottom', 'add'),
+      },
+      {
+        id: 'add-col-left',
+        group: lang === 'hu' ? 'Vászon' : 'Canvas',
+        label: lang === 'hu' ? '+1 oszlop balra' : '+1 column on left',
+        run: () => handleEdgeCol('left', 'add'),
+      },
+      {
+        id: 'add-col-right',
+        group: lang === 'hu' ? 'Vászon' : 'Canvas',
+        label: lang === 'hu' ? '+1 oszlop jobbra' : '+1 column on right',
+        run: () => handleEdgeCol('right', 'add'),
       },
       {
         id: 'view-toggle',
@@ -1941,6 +2105,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
       allStitches,
       fullLiveText,
       onNewBlank,
+      handleClearPattern,
+      handleEdgeRow,
+      handleEdgeCol,
       handleUndo,
       handleRedo,
       theme,
@@ -2008,29 +2175,79 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         }}
       />
 
-      {/* Unified Studio Sub-Toolbar (Desktop full controls; Mobile/Tablet ultra-slim single line) */}
-      <div className="shrink-0 flex items-center justify-between gap-2 border-b border-line bg-surface px-3 sm:px-4 py-1.5">
-        {/* Mobile/Tablet (< lg): Active yarn + stitch summary without duplicate buttons */}
-        <div className="flex lg:hidden items-center gap-2 min-w-0">
+      {/* Unified Studio Sub-Toolbar (Desktop full controls; Mobile/Tablet quick 1-tap row & clear controls) */}
+      <div className="shrink-0 flex items-center justify-between gap-1 sm:gap-2 border-b border-line bg-surface px-2 sm:px-4 py-1.5">
+        {/* Mobile/Tablet (< lg): Active swatch/fit + 1-tap Row Stepper + 1-tap Clear */}
+        <div className="flex lg:hidden items-center gap-1 sm:gap-1.5 min-w-0 flex-1 overflow-x-auto">
           {!knitMode ? (
             <>
-              <span
-                className="w-6 h-6 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono font-bold text-xs shrink-0"
-                style={{
-                  backgroundColor: brushMode === 's' ? 'transparent' : doc.pal[curYarn],
-                  color: brushMode === 's' ? 'inherit' : contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
+              <button
+                type="button"
+                onClick={() => {
+                  manualMobileZoomRef.current = false;
+                  setZoom(computeFitZoom());
                 }}
+                title={t.toolbar.fit}
+                aria-label={t.toolbar.fit}
+                className="inline-flex items-center gap-1 sm:gap-1.5 min-h-[34px] rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none px-1.5 cursor-pointer shrink-0"
               >
-                {brushMode !== 'c' && curSym > 0 ? allStitches[curSym]?.glyph : ''}
-              </span>
-              <span className="text-xs font-medium text-ink-secondary truncate">
-                {brushMode !== 's' ? `${lang === 'hu' ? 'Fonal' : 'Yarn'} ${YARN_LETTERS[curYarn]}` : ''}
-                {brushMode === 'b' ? ' · ' : ''}
-                {brushMode !== 'c' ? (allStitches[curSym]?.code ?? 'k') : ''}
-              </span>
-              <span className="font-mono text-[11px] text-ink-muted tabular-nums shrink-0">
-                {Math.round(zoom * 100)}%
-              </span>
+                <span
+                  className="w-5 h-5 rounded-[2.5px] border border-line-strong flex items-center justify-center font-mono font-bold text-[11px] shrink-0"
+                  style={{
+                    backgroundColor: brushMode === 's' ? 'transparent' : doc.pal[curYarn],
+                    color: brushMode === 's' ? 'inherit' : contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
+                  }}
+                >
+                  {brushMode !== 'c' && curSym > 0 ? allStitches[curSym]?.glyph : ''}
+                </span>
+                <span className="font-mono text-[11px] font-medium text-ink-muted tabular-nums">
+                  {Math.round(zoom * 100)}%
+                </span>
+              </button>
+
+              {/* 1-Tap Row Count Stepper */}
+              <div
+                className="inline-flex items-center gap-0.5 rounded-kw-sm bg-surface-subtle/85 p-0.5 shrink-0"
+                role="group"
+                aria-label={t.size.rows}
+              >
+                <button
+                  type="button"
+                  disabled={doc.rows <= 2}
+                  onClick={() => handleEdgeRow('top', 'remove')}
+                  aria-label={t.size.delRow}
+                  title={t.size.delRow}
+                  className="min-h-[30px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-1 font-mono text-[11px] font-semibold text-ink tabular-nums whitespace-nowrap">
+                  {doc.rows} {lang === 'hu' ? 'sor' : 'r'}
+                </span>
+                <button
+                  type="button"
+                  disabled={doc.rows >= 400}
+                  onClick={() => handleEdgeRow('top', 'add')}
+                  aria-label={t.size.insertRow}
+                  title={t.size.insertRow}
+                  className="min-h-[30px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* 1-Tap Clear Pattern */}
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearPattern}
+                title={lang === 'hu' ? 'Minta törlése egy gombnyomással' : 'Clear pattern with one tap'}
+                aria-label={lang === 'hu' ? 'Minta törlése' : 'Clear pattern'}
+                className="min-h-[34px] min-w-[34px] sm:min-w-0 px-2 text-xs font-semibold shrink-0"
+              >
+                <Eraser className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">{lang === 'hu' ? 'Törlés' : 'Clear'}</span>
+              </Button>
             </>
           ) : (
             <span className="text-xs font-semibold text-ink truncate">
@@ -2087,7 +2304,14 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           >
             <ZoomIn className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setZoom(computeFitZoom())}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              manualMobileZoomRef.current = false;
+              setZoom(computeFitZoom());
+            }}
+          >
             {t.toolbar.fit}
           </Button>
 
@@ -2113,20 +2337,65 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           </Button>
 
           {!knitMode && (
-            <Button
-              variant={zenMode ? 'primary' : 'ghost'}
-              size="sm"
-              aria-pressed={zenMode}
-              onClick={() => setZenMode((v) => !v)}
-              title={lang === 'hu' ? 'Zen mód — oldalsávok elrejtése (Tab)' : 'Zen mode — hide sidebars (Tab)'}
-            >
-              {zenMode ? <Minimize2 className="w-3.5 h-3.5 shrink-0" /> : <Maximize2 className="w-3.5 h-3.5 shrink-0" />}
-              <span className="hidden xl:inline">{lang === 'hu' ? 'Zen' : 'Zen'}</span>
-            </Button>
+            <>
+              <span className="h-4 w-px bg-line mx-1" aria-hidden="true" />
+
+              {/* Desktop 1-Tap Row Stepper & Clear Pattern */}
+              <div
+                className="inline-flex items-center gap-0.5 rounded-kw-sm bg-surface-subtle/85 p-0.5"
+                role="group"
+                aria-label={t.size.rows}
+              >
+                <button
+                  type="button"
+                  disabled={doc.rows <= 2}
+                  onClick={() => handleEdgeRow('top', 'remove')}
+                  aria-label={t.size.delRow}
+                  title={t.size.delRow}
+                  className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-1.5 font-mono text-xs font-semibold text-ink tabular-nums whitespace-nowrap">
+                  {doc.rows} {lang === 'hu' ? 'sor' : 'rows'}
+                </span>
+                <button
+                  type="button"
+                  disabled={doc.rows >= 400}
+                  onClick={() => handleEdgeRow('top', 'add')}
+                  aria-label={t.size.insertRow}
+                  title={t.size.insertRow}
+                  className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleClearPattern}
+                title={lang === 'hu' ? 'Minta törlése egy gombnyomással' : 'Clear pattern'}
+              >
+                <Eraser className="w-3.5 h-3.5 shrink-0" />
+                <span>{lang === 'hu' ? 'Törlés' : 'Clear'}</span>
+              </Button>
+
+              <Button
+                variant={zenMode ? 'primary' : 'ghost'}
+                size="sm"
+                aria-pressed={zenMode}
+                onClick={() => setZenMode((v) => !v)}
+                title={lang === 'hu' ? 'Zen mód — oldalsávok elrejtése (Tab)' : 'Zen mode — hide sidebars (Tab)'}
+              >
+                {zenMode ? <Minimize2 className="w-3.5 h-3.5 shrink-0" /> : <Maximize2 className="w-3.5 h-3.5 shrink-0" />}
+                <span className="hidden xl:inline">{lang === 'hu' ? 'Zen' : 'Zen'}</span>
+              </Button>
+            </>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {!knitMode && (
             <div ref={topMenuRef} className="relative">
               <Button
@@ -2134,15 +2403,17 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 size="sm"
                 aria-haspopup="menu"
                 aria-expanded={topMenuOpen}
+                aria-label={lang === 'hu' ? 'Menü' : 'Menu'}
                 onClick={() => setTopMenuOpen((v) => !v)}
                 title={
                   lang === 'hu'
                     ? 'Menü — zárt panelek mellett is elérhető műveletek'
                     : 'Menu — tools and editors accessible when panels are closed'
                 }
+                className="min-h-[34px] px-2 sm:px-2.5"
               >
                 <Menu className="w-3.5 h-3.5 shrink-0" />
-                <span>{lang === 'hu' ? 'Menü' : 'Menu'}</span>
+                <span className="hidden sm:inline">{lang === 'hu' ? 'Menü' : 'Menu'}</span>
                 <ChevronDown className={cn('w-3.5 h-3.5 shrink-0 transition-transform duration-150', topMenuOpen && 'rotate-180')} />
               </Button>
 
@@ -2441,9 +2712,12 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             }}
             title={knitMode ? t.toolbar.exitKnitModeHint : t.toolbar.knitModeHint}
             aria-label={knitMode ? t.toolbar.exitKnitModeHint : t.toolbar.knitModeHint}
+            className="min-h-[34px] px-2 sm:px-2.5"
           >
             {knitMode ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-            {knitMode ? t.toolbar.exitKnitMode : t.toolbar.knitMode}
+            <span className={knitMode ? 'inline' : 'hidden sm:inline'}>
+              {knitMode ? t.toolbar.exitKnitMode : t.toolbar.knitMode}
+            </span>
           </Button>
 
           <span className="h-4 w-px bg-line mx-0.5 hidden md:inline-block" aria-hidden="true" />
@@ -2508,7 +2782,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 tone="success"
                 pressed={wakeActive}
                 onClick={toggleWakeLock}
-                className="min-h-[44px] px-3.5 text-sm bg-surface text-ink border-line-strong"
+                className="min-h-[44px] px-3.5 text-sm bg-surface-subtle text-ink"
               >
                 {wakeActive ? t.tracker.wakeLockOff : t.tracker.wakeLock}
               </ToggleButton>
@@ -2534,8 +2808,8 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             {/* Secondary Shaping / Repeat Cycle Counter */}
             <div
               className={cn(
-                'flex flex-wrap items-center gap-2 rounded-kw-md border px-3 py-2 tabular-nums',
-                cycleReached ? 'border-warning bg-warning-bg text-ink' : 'border-line-strong bg-surface-subtle text-ink'
+                'flex flex-wrap items-center gap-2 rounded-kw-md px-3 py-2 tabular-nums',
+                cycleReached ? 'bg-warning-surface text-warning-fg' : 'border border-line-strong bg-surface-subtle text-ink'
               )}
             >
               <span className="text-xs font-bold">
@@ -2544,7 +2818,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               <span className="font-mono text-base font-extrabold">
                 {cycleCurrent} / {cycleEvery}
               </span>
-              <label className="inline-flex items-center gap-1 text-xs text-ink-secondary">
+              <label className={cn('inline-flex items-center gap-1 text-xs', cycleReached ? 'text-warning-fg/85' : 'text-ink-secondary')}>
                 <span>{lang === 'hu' ? 'Minden' : 'Every'}</span>
                 <input
                   type="number"
@@ -2579,7 +2853,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
               {cycleReached && (
-                <span className="text-xs font-extrabold text-danger">
+                <span className="text-xs font-extrabold text-warning-fg">
                   {lang === 'hu' ? 'Művelet sor!' : 'Action row!'}
                 </span>
               )}
@@ -2590,7 +2864,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             <Button
               variant="icon"
               onClick={retreatKnitRow}
-              className="min-h-[60px] min-w-[68px] rounded-kw-md border-line-strong"
+              className="min-h-[60px] min-w-[68px] rounded-kw-md bg-surface-subtle/90 shadow-[var(--kw-btn-shadow)]"
               aria-label={t.tracker.prev}
             >
               <ChevronLeft className="w-7 h-7" />
@@ -2634,10 +2908,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         setDoneStepIdxs((prev) => (prev.includes(idx) ? prev.filter((x) => x !== idx) : [...prev, idx]))
                       }
                       className={cn(
-                        'inline-flex items-center gap-2.5 min-h-[46px] px-3.5 py-2 rounded-kw-sm border-2 text-base font-bold cursor-pointer transition-opacity',
+                        'inline-flex items-center gap-2.5 min-h-[46px] px-3.5 py-2 rounded-kw-sm border-0 text-base font-bold cursor-pointer transition-opacity',
                         done
-                          ? 'border-line bg-surface-subtle text-ink-muted line-through opacity-50'
-                          : 'border-line-strong bg-surface text-ink hover:border-accent'
+                          ? 'bg-surface-subtle text-ink-muted line-through opacity-50 shadow-none'
+                          : 'bg-surface text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none'
                       )}
                     >
                       {!chunk.isNoStitch && bgHex ? (
@@ -2648,7 +2922,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                           {YARN_LETTERS[chunk.yarnIdx]}
                         </span>
                       ) : (
-                        <span className="w-7 h-7 rounded-kw-sm border border-line-strong bg-surface-subtle flex items-center justify-center font-mono text-sm font-bold shrink-0">
+                        <span className="w-7 h-7 rounded-kw-sm bg-surface-subtle flex items-center justify-center font-mono text-sm font-bold shrink-0">
                           ×
                         </span>
                       )}
@@ -2671,7 +2945,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               type="button"
               onClick={advanceKnitRow}
               title={lang === 'hu' ? 'Koppints ide a következő sorra ugráshoz' : 'Tap here to advance to the next row'}
-              className="flex-1 min-w-[220px] text-left font-mono text-xs sm:text-sm font-medium text-ink bg-surface-subtle hover:bg-accent-soft rounded-kw-sm px-3.5 py-2.5 border border-line-strong cursor-pointer"
+              className="flex-1 min-w-[220px] text-left font-mono text-xs sm:text-sm font-medium text-ink bg-surface-subtle hover:bg-accent-soft rounded-kw-sm px-3.5 py-2.5 border-0 shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none cursor-pointer"
             >
               <span className="font-bold text-accent mr-2">{lang === 'hu' ? 'Koppints →' : 'Tap →'}</span>
               {trackerText}
@@ -2693,10 +2967,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       aria-pressed={active}
                       onClick={() => setHighlightSym((prev) => (prev === st.idx ? null : st.idx))}
                       className={cn(
-                        'min-h-[38px] px-2.5 rounded-kw-sm border font-mono text-xs font-bold cursor-pointer',
+                        'min-h-[38px] px-2.5 rounded-kw-sm border-0 font-mono text-xs font-bold cursor-pointer active:translate-y-[1px] active:shadow-none',
                         active
-                          ? 'border-line-strong bg-accent text-accent-fg'
-                          : 'border-line bg-surface-subtle text-ink hover:border-accent'
+                          ? 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)]'
+                          : 'bg-surface-subtle text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                       )}
                     >
                       {st.glyph} {st.code}
@@ -2710,7 +2984,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     setHighlightSym(null);
                     setHighlightYarn(null);
                   }}
-                  className="min-h-[38px] px-2.5 rounded-kw-sm border border-line text-xs font-bold text-danger hover:bg-danger-bg cursor-pointer"
+                  className="min-h-[38px] px-2.5 rounded-kw-sm border-0 bg-surface-subtle text-xs font-bold text-danger hover:bg-danger-bg shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none cursor-pointer"
                 >
                   {lang === 'hu' ? 'Törlés' : 'Clear'}
                 </button>
@@ -2743,7 +3017,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               </ToggleButton>
             ))}
 
-            <div className="w-full border-t border-line pt-1.5 flex flex-col gap-1">
+            <div className="w-full pt-2.5 flex flex-col gap-1">
               <ToggleButton
                 layout="tile"
                 tone="neutral"
@@ -2829,7 +3103,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   aria-label={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv bezárása' : 'Collapse left rail'}
                   title={leftCompact ? (lang === 'hu' ? 'Bal sáv kinyitása' : 'Expand left rail') : lang === 'hu' ? 'Bal sáv bezárása' : 'Collapse left rail'}
                   className={cn(
-                    'min-h-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors',
+                    'min-h-[28px] rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors',
                     leftCompact ? 'w-full' : 'ml-auto min-w-[28px]'
                   )}
                 >
@@ -2857,7 +3131,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               {leftCompact ? (
                 <>
                   {/* Closed-rail Mirror & Brush Mode icon indicators/toggles */}
-                  <div className="pt-1.5 border-t border-line grid grid-cols-1 gap-1">
+                  <div className="pt-2.5 grid grid-cols-1 gap-1">
                     <ToggleButton
                       layout="tile"
                       tone="symmetry"
@@ -2882,7 +3156,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     </ToggleButton>
                   </div>
 
-                  <div className="pt-1.5 border-t border-line grid grid-cols-1 gap-1">
+                  <div className="pt-2.5 grid grid-cols-1 gap-1">
                     {(
                       [
                         ['b', t.panels.both, Layers],
@@ -2907,7 +3181,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </>
               ) : (
                 <>
-                  <div className="pt-1.5 border-t border-line grid grid-cols-2 gap-1.5">
+                  <div className="pt-2.5 grid grid-cols-2 gap-1.5">
                     <ToggleButton
                       layout="inline"
                       tone="symmetry"
@@ -2983,7 +3257,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             <div className="hidden lg:flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
               <div className="flex items-center gap-2 pr-2.5 border-r border-line">
                 <div
-                  className="w-7 h-7 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono font-bold text-sm shrink-0"
+                  className="w-7 h-7 rounded-kw-sm border-0 flex items-center justify-center font-mono font-bold text-sm shrink-0"
                   style={{
                     backgroundColor: brushMode === 's' ? 'transparent' : doc.pal[curYarn],
                     color: brushMode === 's' ? 'inherit' : contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
@@ -3006,8 +3280,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     <div
                       key={idx}
                       className={cn(
-                        'inline-flex items-center gap-1 rounded-kw-sm border px-1.5 py-0.5 transition-colors',
-                        active ? 'border-accent-line bg-accent-soft' : 'border-line bg-surface-subtle/60 hover:bg-surface-hover'
+                        'inline-flex items-center gap-1 rounded-kw-sm border-0 px-1.5 py-0.5 transition-colors',
+                        active
+                          ? 'bg-accent-soft shadow-[var(--kw-btn-shadow-primary)]'
+                          : 'bg-surface-subtle/85 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                       )}
                     >
                       <button
@@ -3025,7 +3301,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       </button>
                       <label
                         title={lang === 'hu' ? `${YARN_LETTERS[idx]} fonal színének módosítása` : `Change Yarn ${YARN_LETTERS[idx]} color`}
-                        className="relative w-5 h-5 rounded-full border border-black/25 dark:border-white/30 cursor-pointer shrink-0 overflow-hidden"
+                        className="relative w-5 h-5 rounded-full border-0 cursor-pointer shrink-0 overflow-hidden"
                         style={{ backgroundColor: hex }}
                       >
                         <input
@@ -3050,9 +3326,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                             onChangeDoc({ ...doc, pal: nextPal, grid: nextGrid, updatedAt: Date.now() });
                           }}
                           aria-label={`Remove yarn ${YARN_LETTERS[idx]}`}
-                          className="w-6 h-6 rounded-kw-sm flex items-center justify-center text-danger hover:bg-danger-bg cursor-pointer"
+                          className="w-6 h-6 rounded-kw-sm border-0 bg-danger-surface hover:bg-danger-surface-hover text-white shadow-[var(--kw-btn-shadow-danger)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer transition-colors"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3 h-3 text-white" />
                         </button>
                       )}
                     </div>
@@ -3081,7 +3357,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     setHighlightSym(null);
                     setHighlightYarn(null);
                   }}
-                  className="inline-flex items-center gap-1.5 min-h-[30px] px-2.5 rounded-kw-sm border border-accent-line bg-accent-soft text-xs font-medium text-ink cursor-pointer"
+                  className="inline-flex items-center gap-1.5 min-h-[30px] px-2.5 rounded-kw-sm border-0 bg-accent-soft hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none text-xs font-medium text-ink cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>{lang === 'hu' ? 'Kiemelés kikapcsolása' : 'Clear spotlight'}</span>
@@ -3158,7 +3434,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 {lang === 'hu' ? 'Kitöltés' : 'Fill'}
               </Button>
               <Button variant="danger" size="sm" onClick={() => runSelectionOp('d')} aria-label="Clear selection" className="min-h-[42px] min-w-[42px] md:min-h-[32px] md:min-w-0">
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-4 h-4 text-white" />
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setSelection(null)} className="ml-auto min-h-[42px] md:min-h-[32px]">
                 <X className="w-4 h-4" />
@@ -3180,44 +3456,174 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               }
             }}
             className={cn(
-              'w-full flex-1 min-h-0 overflow-auto kw-stage-bg p-3 sm:p-6 lg:p-8',
+              'w-full flex-1 min-h-0 overflow-auto kw-stage-bg p-2 sm:p-6 lg:p-8',
               knitMode
                 ? 'max-h-[56dvh] min-h-[240px] lg:max-h-[64vh] lg:min-h-[400px]'
                 : 'lg:h-[calc(100vh-148px)] lg:min-h-[500px]'
             )}
           >
-            <canvas
-              ref={canvasRef}
-              tabIndex={0}
-              role="application"
-              aria-label="Knitting chart canvas"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUpOrCancel}
-              onPointerCancel={handlePointerUpOrCancel}
-              onPointerLeave={() => {
-                if (!isDrawingRef.current) setHoverHud(null);
-              }}
-              onKeyDown={handleCanvasKeyDown}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                if (knitMode) return;
-                const cell = getCellFromPointer(e.clientX, e.clientY);
-                if (cell) {
-                  setSelection({ r0: cell[0], r1: cell[0], k0: cell[1], k1: cell[1] });
-                }
-              }}
-              className={cn(
-                'block mx-auto border border-black/15 dark:border-white/20 bg-paper shadow-kw-md focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2',
-                knitMode
-                  ? 'touch-pan-x touch-pan-y'
-                  : effectiveTool === 'h'
-                  ? isPanning
-                    ? 'cursor-grabbing touch-none'
-                    : 'cursor-grab touch-none'
-                  : 'cursor-crosshair touch-none'
+            <div className="grid w-fit mx-auto grid-cols-[auto_auto_auto] items-center justify-items-center gap-1">
+              {!knitMode && (
+                <div
+                  className="col-start-2 row-start-1 inline-flex items-center gap-1 rounded-kw-sm bg-surface/85 backdrop-blur-sm p-0.5 shadow-kw-sm"
+                  role="group"
+                  aria-label={lang === 'hu' ? 'Sor hozzáadása vagy törlése felül' : 'Add or remove top row'}
+                >
+                  <button
+                    type="button"
+                    disabled={doc.rows <= 2}
+                    onClick={() => handleEdgeRow('top', 'remove')}
+                    title={lang === 'hu' ? '−1 sor felül' : '−1 top row'}
+                    aria-label={lang === 'hu' ? '−1 sor felül' : '−1 top row'}
+                    className="min-h-[26px] min-w-[28px] px-1.5 rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-1 text-[10px] font-mono font-semibold text-ink-muted select-none">
+                    {lang === 'hu' ? 'Felül' : 'Top'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={doc.rows >= 400}
+                    onClick={() => handleEdgeRow('top', 'add')}
+                    title={lang === 'hu' ? '+1 sor felül' : '+1 top row'}
+                    aria-label={lang === 'hu' ? '+1 sor felül' : '+1 top row'}
+                    className="min-h-[26px] min-w-[28px] px-1.5 rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
-            />
+
+              {!knitMode && (
+                <div
+                  className="col-start-1 row-start-2 inline-flex flex-col items-center gap-1 rounded-kw-sm bg-surface/85 backdrop-blur-sm p-0.5 shadow-kw-sm"
+                  role="group"
+                  aria-label={lang === 'hu' ? 'Oszlop hozzáadása vagy törlése balra' : 'Add or remove left column'}
+                >
+                  <button
+                    type="button"
+                    disabled={doc.cols >= 300}
+                    onClick={() => handleEdgeCol('left', 'add')}
+                    title={lang === 'hu' ? '+1 oszlop balra' : '+1 left column'}
+                    aria-label={lang === 'hu' ? '+1 oszlop balra' : '+1 left column'}
+                    className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="py-0.5 text-[9px] font-mono font-semibold text-ink-muted leading-none select-none">
+                    {lang === 'hu' ? 'B' : 'L'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={doc.cols <= 2}
+                    onClick={() => handleEdgeCol('left', 'remove')}
+                    title={lang === 'hu' ? '−1 oszlop balra' : '−1 left column'}
+                    aria-label={lang === 'hu' ? '−1 oszlop balra' : '−1 left column'}
+                    className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <canvas
+                ref={canvasRef}
+                tabIndex={0}
+                role="application"
+                aria-label="Knitting chart canvas"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUpOrCancel}
+                onPointerCancel={handlePointerUpOrCancel}
+                onPointerLeave={() => {
+                  if (!isDrawingRef.current) setHoverHud(null);
+                }}
+                onKeyDown={handleCanvasKeyDown}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (knitMode) return;
+                  const cell = getCellFromPointer(e.clientX, e.clientY);
+                  if (cell) {
+                    setSelection({ r0: cell[0], r1: cell[0], k0: cell[1], k1: cell[1] });
+                  }
+                }}
+                className={cn(
+                  'col-start-2 row-start-2 block border border-line-strong bg-paper shadow-kw-md focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2',
+                  knitMode
+                    ? 'touch-pan-x touch-pan-y'
+                    : effectiveTool === 'h'
+                    ? isPanning
+                      ? 'cursor-grabbing touch-none'
+                      : 'cursor-grab touch-none'
+                    : 'cursor-crosshair touch-none'
+                )}
+              />
+
+              {!knitMode && (
+                <div
+                  className="col-start-3 row-start-2 inline-flex flex-col items-center gap-1 rounded-kw-sm bg-surface/85 backdrop-blur-sm p-0.5 shadow-kw-sm"
+                  role="group"
+                  aria-label={lang === 'hu' ? 'Oszlop hozzáadása vagy törlése jobbra' : 'Add or remove right column'}
+                >
+                  <button
+                    type="button"
+                    disabled={doc.cols >= 300}
+                    onClick={() => handleEdgeCol('right', 'add')}
+                    title={lang === 'hu' ? '+1 oszlop jobbra' : '+1 right column'}
+                    aria-label={lang === 'hu' ? '+1 oszlop jobbra' : '+1 right column'}
+                    className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="py-0.5 text-[9px] font-mono font-semibold text-ink-muted leading-none select-none">
+                    {lang === 'hu' ? 'J' : 'R'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={doc.cols <= 2}
+                    onClick={() => handleEdgeCol('right', 'remove')}
+                    title={lang === 'hu' ? '−1 oszlop jobbra' : '−1 right column'}
+                    aria-label={lang === 'hu' ? '−1 oszlop jobbra' : '−1 right column'}
+                    className="min-h-[28px] min-w-[26px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {!knitMode && (
+                <div
+                  className="col-start-2 row-start-3 inline-flex items-center gap-1 rounded-kw-sm bg-surface/85 backdrop-blur-sm p-0.5 shadow-kw-sm"
+                  role="group"
+                  aria-label={lang === 'hu' ? 'Sor hozzáadása vagy törlése alul' : 'Add or remove bottom row'}
+                >
+                  <button
+                    type="button"
+                    disabled={doc.rows <= 2}
+                    onClick={() => handleEdgeRow('bottom', 'remove')}
+                    title={lang === 'hu' ? '−1 sor alul' : '−1 bottom row'}
+                    aria-label={lang === 'hu' ? '−1 sor alul' : '−1 bottom row'}
+                    className="min-h-[26px] min-w-[28px] px-1.5 rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink-secondary hover:text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-1 text-[10px] font-mono font-semibold text-ink-muted select-none">
+                    {lang === 'hu' ? 'Alul' : 'Bottom'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={doc.rows >= 400}
+                    onClick={() => handleEdgeRow('bottom', 'add')}
+                    title={lang === 'hu' ? '+1 sor alul' : '+1 bottom row'}
+                    aria-label={lang === 'hu' ? '+1 sor alul' : '+1 bottom row'}
+                    className="min-h-[26px] min-w-[28px] px-1.5 rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-30 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -3238,13 +3644,13 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   aria-expanded={false}
                   aria-label={lang === 'hu' ? 'Szemjelek oszlop kinyitása' : 'Open stitch symbols'}
                   title={lang === 'hu' ? 'Szemjelek oszlop kinyitása' : 'Open stitch symbols'}
-                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
+                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
                 >
                   <PanelRightOpen className="w-4 h-4" />
                 </button>
 
                 {/* Closed Icon Rail: 1-Click Stitch Glyph Buttons */}
-                <div className="flex flex-row lg:flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-x-auto lg:overflow-y-auto lg:overflow-x-hidden lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="flex flex-row lg:flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-x-auto lg:overflow-y-auto lg:overflow-x-hidden lg:w-full lg:pt-2.5">
                   {allStitches.map((st) => {
                     const active = curSym === st.idx;
                     return (
@@ -3258,10 +3664,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                           if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
                         }}
                         className={cn(
-                          'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center font-semibold text-sm shrink-0 cursor-pointer transition-colors',
+                          'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border-0 flex items-center justify-center font-semibold text-sm shrink-0 cursor-pointer active:translate-y-[1px] active:shadow-none transition-colors',
                           active
-                            ? 'border-transparent bg-accent text-accent-fg shadow-kw-sm'
-                            : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line'
+                            ? 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)]'
+                            : 'bg-surface-subtle/85 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                         )}
                       >
                         {st.glyph}
@@ -3271,13 +3677,13 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </div>
 
                 {/* Pinned Bottom Modal Trigger Icon: Add Custom Stitch */}
-                <div className="shrink-0 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="shrink-0 lg:w-full lg:pt-2.5">
                   <button
                     type="button"
                     onClick={() => setCustomStitchModalOpen(true)}
                     title={`${t.panels.addCustomStitch} (↗)`}
                     aria-label={t.panels.addCustomStitch}
-                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong flex items-center justify-center text-ink cursor-pointer transition-colors"
+                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink cursor-pointer transition-colors"
                   >
                     <PlusCircle className="w-4 h-4" />
                   </button>
@@ -3285,7 +3691,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               </div>
             ) : (
               <>
-                <div className="shrink-0 border-b border-line px-3 py-2.5 flex items-center justify-between gap-2">
+                <div className="shrink-0 px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <h2 className="text-xs font-semibold text-ink-secondary truncate">
                       {t.panels.symbols}
@@ -3300,14 +3706,14 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     aria-expanded={true}
                     aria-label={lang === 'hu' ? 'Szemjelek oszlop bezárása' : 'Close stitch symbols'}
                     title={lang === 'hu' ? 'Szemjelek oszlop bezárása' : 'Close stitch symbols'}
-                    className="min-h-[28px] min-w-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors shrink-0"
+                    className="min-h-[28px] min-w-[28px] rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors shrink-0"
                   >
                     <PanelRightClose className="w-4 h-4" />
                   </button>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {allStitches.map((st) => {
                       const active = curSym === st.idx;
                       const shortTitle = (lang === 'hu' ? st.titleHu : st.titleEn).split('(')[0].trim();
@@ -3322,18 +3728,18 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                             if (['e', 'n', 'h', 'i'].includes(tool)) setTool('p');
                           }}
                           className={cn(
-                            'flex items-center gap-2 min-h-[36px] rounded-kw-sm border px-1.5 py-1 text-left cursor-pointer',
+                            'flex items-center gap-2 min-h-[36px] rounded-kw-sm border-0 px-1.5 py-1 text-left cursor-pointer active:translate-y-[1px] active:shadow-none',
                             active
-                              ? 'border-transparent bg-accent text-accent-fg font-semibold shadow-kw-sm'
-                              : 'border-transparent bg-surface-subtle/70 text-ink hover:bg-surface-hover'
+                              ? 'bg-accent text-accent-fg font-semibold shadow-[var(--kw-btn-shadow-primary)]'
+                              : 'bg-surface-subtle/85 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                           )}
                         >
                           <span
                             className={cn(
-                              'w-6 h-6 rounded-[5px] flex items-center justify-center font-semibold text-sm shrink-0',
+                              'w-6 h-6 rounded-[3px] flex items-center justify-center font-semibold text-sm shrink-0',
                               active
                                 ? 'bg-white/20 dark:bg-black/20'
-                                : 'bg-surface border border-line'
+                                : 'bg-surface'
                             )}
                           >
                             {st.glyph}
@@ -3355,11 +3761,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   </div>
                 </div>
 
-                <div className="shrink-0 border-t border-line bg-surface p-2.5">
+                <div className="shrink-0 bg-surface px-2.5 pt-2 pb-2.5">
                   <button
                     type="button"
                     onClick={() => setCustomStitchModalOpen(true)}
-                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer transition-colors"
+                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none text-xs font-semibold text-ink cursor-pointer transition-colors"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <PlusCircle className="w-4 h-4 shrink-0 text-ink-muted" />
@@ -3390,7 +3796,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   aria-expanded={false}
                   aria-label={lang === 'hu' ? 'Jobb sáv kinyitása' : 'Open right inspector'}
                   title={lang === 'hu' ? 'Jobb sáv kinyitása' : 'Open right inspector'}
-                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
+                  className="min-h-[32px] min-w-[32px] lg:w-full rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer shrink-0 transition-colors"
                 >
                   <PanelRightOpen className="w-4 h-4" />
                 </button>
@@ -3417,11 +3823,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   }
                   aria-label={lang === 'hu' ? 'Állapot és ellenőrzés' : 'Health check'}
                   className={cn(
-                    'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center cursor-pointer shrink-0 transition-colors',
+                    'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer shrink-0 transition-colors',
                     analysis.mismatchRows.length > 0
-                      ? 'text-danger border-danger-line'
+                      ? 'text-danger'
                       : analysis.floatRows.length > 0
-                      ? 'text-warning border-warning-line'
+                      ? 'text-warning'
                       : 'text-success'
                   )}
                 >
@@ -3433,7 +3839,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </button>
 
                 {/* Tab Quick-Open Icons */}
-                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:pt-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -3443,10 +3849,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     title={lang === 'hu' ? 'Élő szöveg kinyitása' : 'Open Live Text'}
                     aria-label={lang === 'hu' ? 'Élő szöveg' : 'Live Text'}
                     className={cn(
-                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border-0 shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer transition-colors',
                       rightTab === 'live'
-                        ? 'border-line-strong bg-surface-hover text-ink'
-                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                        ? 'bg-surface-hover text-ink'
+                        : 'bg-surface-subtle/80 text-ink-secondary hover:bg-surface-hover hover:text-ink'
                     )}
                   >
                     <AlignLeft className="w-4 h-4" />
@@ -3460,10 +3866,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     title={lang === 'hu' ? 'Ellenőrzés kinyitása' : 'Open Checks'}
                     aria-label={lang === 'hu' ? 'Ellenőrzés' : 'Checks'}
                     className={cn(
-                      'relative min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      'relative min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border-0 shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer transition-colors',
                       rightTab === 'checks'
-                        ? 'border-line-strong bg-surface-hover text-ink'
-                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                        ? 'bg-surface-hover text-ink'
+                        : 'bg-surface-subtle/80 text-ink-secondary hover:bg-surface-hover hover:text-ink'
                     )}
                   >
                     <ClipboardCheck className="w-4 h-4" />
@@ -3480,10 +3886,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     title={lang === 'hu' ? 'Jelmagyarázat kinyitása' : 'Open Legend'}
                     aria-label={lang === 'hu' ? 'Jelmagyarázat' : 'Legend'}
                     className={cn(
-                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                      'min-h-[34px] min-w-[34px] lg:w-full rounded-kw-sm border-0 shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center cursor-pointer transition-colors',
                       rightTab === 'legend'
-                        ? 'border-line-strong bg-surface-hover text-ink'
-                        : 'border-transparent text-ink-secondary hover:bg-surface-hover hover:text-ink'
+                        ? 'bg-surface-hover text-ink'
+                        : 'bg-surface-subtle/80 text-ink-secondary hover:bg-surface-hover hover:text-ink'
                     )}
                   >
                     <Bookmark className="w-4 h-4" />
@@ -3491,7 +3897,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </div>
 
                 {/* Mirror & Brush Mode State Icons Visible While Right Panel Is Closed */}
-                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:pt-2.5">
                   <ToggleButton
                     layout="tile"
                     tone="symmetry"
@@ -3516,7 +3922,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   </ToggleButton>
                 </div>
 
-                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="flex flex-row lg:flex-col gap-1 lg:w-full lg:pt-2.5">
                   {(
                     [
                       ['b', t.panels.both, Layers],
@@ -3540,7 +3946,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </div>
 
                 {/* Pinned Bottom Modal Trigger Icon: Grid Editor */}
-                <div className="lg:mt-auto lg:w-full lg:border-t lg:border-line lg:pt-2">
+                <div className="lg:mt-auto lg:w-full lg:pt-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -3550,7 +3956,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     }}
                     title={lang === 'hu' ? 'Rácsszerkesztő megnyitása (↗)' : 'Open Grid editor (↗)'}
                     aria-label={lang === 'hu' ? 'Rácsszerkesztő' : 'Grid editor'}
-                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong flex items-center justify-center text-ink cursor-pointer transition-colors"
+                    className="min-h-[36px] min-w-[36px] lg:w-full rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink cursor-pointer transition-colors"
                   >
                     <FileCode2 className="w-4 h-4" />
                   </button>
@@ -3559,7 +3965,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
             ) : (
               <>
                 {/* Expanded Header + Health Strip + Segmented Tabs */}
-                <div className="shrink-0 space-y-2.5 p-3.5 pb-2.5 border-b border-line">
+                <div className="shrink-0 space-y-2.5 px-3.5 pt-3.5 pb-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-ink-secondary">
                       {t.toolbar.rightPanel}
@@ -3570,7 +3976,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       aria-expanded={true}
                       aria-label={lang === 'hu' ? 'Jobb sáv bezárása' : 'Close right inspector'}
                       title={lang === 'hu' ? 'Jobb sáv bezárása' : 'Close right inspector'}
-                      className="min-h-[28px] min-w-[28px] rounded-kw-sm border border-line bg-surface-subtle/60 hover:border-line-strong hover:bg-surface-hover flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors"
+                      className="min-h-[28px] min-w-[28px] rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none flex items-center justify-center text-ink-secondary hover:text-ink cursor-pointer transition-colors"
                     >
                       <PanelRightClose className="w-4 h-4" />
                     </button>
@@ -3583,7 +3989,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         type="button"
                         onClick={() => setRightTab('checks')}
                         className={cn(
-                          'inline-flex items-center gap-1.5 text-xs font-bold rounded-kw-sm border border-transparent hover:border-line hover:bg-surface-hover px-1.5 py-0.5 -mx-1.5 cursor-pointer transition-colors',
+                          'inline-flex items-center gap-1.5 text-xs font-bold rounded-kw-sm border-0 bg-surface-subtle/85 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none px-2 py-1 cursor-pointer transition-colors',
                           analysis.mismatchRows.length > 0
                             ? 'text-danger'
                             : analysis.floatRows.length > 0
@@ -3623,7 +4029,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     </div>
 
                     {activeLiveRow && (
-                      <div className="rounded-kw-sm border border-line bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
+                      <div className="rounded-kw-sm bg-surface-subtle/80 px-2.5 py-2 font-mono text-xs text-ink break-words leading-snug">
                         <span className="font-semibold text-ink mr-1.5">
                           {lang === 'hu' ? `${activeLiveRow.rowNum}. sor (${activeLiveRow.tag}):` : `R${activeLiveRow.rowNum} (${activeLiveRow.tag}):`}
                         </span>
@@ -3700,7 +4106,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         </div>
                       </div>
 
-                      <div className="rounded-kw-sm border border-line bg-surface-subtle/50 divide-y divide-line font-mono text-xs">
+                      <div className="space-y-1 font-mono text-xs">
                         {livePatternRows.map((item) => {
                           const isActive = item.rowNum === activeCursorRow;
                           const rowMismatch = mismatchSet.has(item.rowNum);
@@ -3712,8 +4118,8 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                                 setCursor((prev) => ({ ...prev, r: Math.max(0, Math.min(doc.rows - 1, doc.rows - item.rowNum)) }))
                               }
                               className={cn(
-                                'group w-full text-left px-2.5 py-2 flex items-start gap-2 cursor-pointer transition-colors',
-                                isActive ? 'bg-accent-soft font-bold text-ink' : 'hover:bg-surface-hover text-ink-secondary',
+                                'group w-full rounded-kw-sm text-left px-2.5 py-2 flex items-start gap-2 cursor-pointer transition-colors',
+                                isActive ? 'bg-accent-soft font-bold text-ink' : 'bg-surface-subtle/60 hover:bg-surface-hover text-ink-secondary',
                                 rowMismatch && 'text-danger'
                               )}
                             >
@@ -3733,20 +4139,23 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   {rightTab === 'checks' && (
                     <div className="space-y-2.5">
                       {(analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 || analysis.multiColorRows.length > 0) && (
-                        <Alert tone="warning" className="px-3 py-2.5 text-xs space-y-1">
+                        <Alert
+                          tone={analysis.mismatchRows.length > 0 ? 'danger' : 'warning'}
+                          className="px-3 py-2.5 text-xs space-y-1"
+                        >
                           {analysis.mismatchRows.length > 0 && (
-                            <div className="font-bold text-danger">
+                            <div className="font-bold text-danger-fg">
                               {t.checks.mismatch} {analysis.mismatchRows.join(', ')}
                             </div>
                           )}
                           {analysis.floatRows.length > 0 && (
-                            <div className="text-ink">
+                            <div className="text-danger-fg/90">
                               {t.checks.floatWarn} {analysis.floatRows.slice(0, 8).join(', ')}
                               {analysis.floatRows.length > 8 ? '…' : ''}
                             </div>
                           )}
                           {analysis.multiColorRows.length > 0 && (
-                            <div className="text-ink">
+                            <div className="text-danger-fg/90">
                               {t.checks.colorWarn} {analysis.multiColorRows.slice(0, 8).join(', ')}
                               {analysis.multiColorRows.length > 8 ? '…' : ''}
                             </div>
@@ -3754,7 +4163,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         </Alert>
                       )}
 
-                      <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 border border-line tabular-nums">
+                      <div className="flex items-center justify-between gap-2 text-xs bg-surface-subtle rounded-kw-sm px-2.5 py-2 tabular-nums">
                         <div className="font-semibold text-ink">
                           {activeRowAnalysis ? (
                             activeRowAnalysis.status === 'mismatch' ? (
@@ -3808,9 +4217,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                                   className={cn(
                                     'cursor-pointer transition-colors',
                                     r.status === 'mismatch'
-                                      ? 'bg-danger-bg text-danger font-bold'
+                                      ? 'bg-danger-surface text-danger-fg font-bold'
                                       : r.maxFloat > floatLimit
-                                      ? 'bg-warning-bg text-warning font-semibold'
+                                      ? 'bg-warning-surface text-warning-fg font-semibold'
                                       : isActive
                                       ? 'bg-accent-soft text-ink font-bold'
                                       : 'hover:bg-surface-hover'
@@ -3851,15 +4260,15 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                                 aria-pressed={highlighted}
                                 onClick={() => setHighlightYarn((prev) => (prev === idx ? null : idx))}
                                 className={cn(
-                                  'group w-full flex items-center justify-between gap-2 rounded-kw-sm border px-2.5 py-2 text-xs cursor-pointer tabular-nums transition-colors',
+                                  'group w-full flex items-center justify-between gap-2 rounded-kw-sm border-0 px-2.5 py-2 text-xs cursor-pointer tabular-nums active:translate-y-[1px] active:shadow-none transition-colors',
                                   highlighted
-                                    ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                    : 'border-line/70 bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line-strong'
+                                    ? 'bg-accent-soft font-semibold text-ink shadow-[var(--kw-btn-shadow-primary)]'
+                                    : 'bg-surface-subtle/85 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                                 )}
                               >
                                 <span className="inline-flex items-center gap-2">
                                   <span
-                                    className="w-5 h-5 rounded-full border border-black/20 dark:border-white/25 flex items-center justify-center font-mono text-[11px] font-bold"
+                                    className="w-5 h-5 rounded-full border border-line-strong flex items-center justify-center font-mono text-[11px] font-bold"
                                     style={{ backgroundColor: hex, color: contrastInk(hex) }}
                                   >
                                     {YARN_LETTERS[idx]}
@@ -3878,11 +4287,11 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         </div>
                       </div>
 
-                      <div className="border-t border-line pt-2.5 space-y-1.5">
+                      <div className="pt-3 space-y-1.5">
                         <div className="text-xs font-semibold text-ink-secondary">
                           {lang === 'hu' ? 'Használt szemjelek (kattints a kiemeléshez)' : 'Used stitches (click to spotlight)'}
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           {usedLegendStitches.map((st) => {
                             const highlighted = highlightSym === st.idx;
                             return (
@@ -3892,13 +4301,13 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                                 aria-pressed={highlighted}
                                 onClick={() => setHighlightSym((prev) => (prev === st.idx ? null : st.idx))}
                                 className={cn(
-                                  'group w-full flex items-center gap-2 rounded-kw-sm border px-2.5 py-1.5 text-left text-xs cursor-pointer transition-colors',
+                                  'group w-full flex items-center gap-2 rounded-kw-sm border-0 px-2.5 py-1.5 text-left text-xs cursor-pointer active:translate-y-[1px] active:shadow-none transition-colors',
                                   highlighted
-                                    ? 'border-accent-line bg-accent-soft font-semibold text-ink'
-                                    : 'border-line/70 bg-surface-subtle/70 text-ink hover:bg-surface-hover hover:border-line-strong'
+                                    ? 'bg-accent-soft font-semibold text-ink shadow-[var(--kw-btn-shadow-primary)]'
+                                    : 'bg-surface-subtle/85 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                                 )}
                               >
-                                <span className="w-6 h-6 rounded-[5px] border border-line bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
+                                <span className="w-6 h-6 rounded-[3px] bg-surface flex items-center justify-center font-semibold text-sm shrink-0">
                                   {st.glyph}
                                 </span>
                                 <span className="font-mono font-semibold shrink-0">{st.code}</span>
@@ -3916,7 +4325,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 </div>
 
                 {/* Pinned Bottom Modal Trigger: Grid Editor */}
-                <div className="shrink-0 border-t border-line bg-surface p-2.5">
+                <div className="shrink-0 bg-surface px-2.5 pt-2 pb-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -3924,7 +4333,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       setGridEditorTab('text');
                       setGridEditorModalOpen(true);
                     }}
-                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border border-line bg-surface-subtle/80 hover:bg-surface-hover hover:border-line-strong text-xs font-semibold text-ink cursor-pointer transition-colors"
+                    className="w-full flex items-center justify-between gap-2 min-h-[36px] px-2.5 py-1.5 rounded-kw-sm border-0 bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none text-xs font-semibold text-ink cursor-pointer transition-colors"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <FileCode2 className="w-4 h-4 shrink-0 text-ink-muted" />
@@ -3967,7 +4376,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               <Redo2 className="w-4 h-4" />
             </Button>
 
-            <div className="w-full border-t border-line pt-1.5 flex flex-col gap-1.5">
+            <div className="w-full pt-2.5 flex flex-col gap-1.5">
               <button
                 type="button"
                 onClick={() => setTouchSheet((s) => (s === 'stitches' ? null : 'stitches'))}
@@ -3975,10 +4384,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 aria-label={t.panels.symbols}
                 title={t.panels.symbols}
                 className={cn(
-                  'w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center font-semibold text-base cursor-pointer transition-colors',
+                  'w-full min-h-[44px] rounded-kw-sm border-0 flex items-center justify-center font-semibold text-base cursor-pointer active:translate-y-[1px] active:shadow-none transition-colors',
                   touchSheet === 'stitches'
-                    ? 'border-accent-line bg-accent text-accent-fg'
-                    : 'border-line bg-surface-subtle/80 text-ink hover:bg-surface-hover'
+                    ? 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)]'
+                    : 'bg-surface-subtle/90 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                 )}
               >
                 {(allStitches[curSym] ?? allStitches[0])?.glyph ?? '■'}
@@ -3991,14 +4400,14 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 aria-label={t.panels.yarns}
                 title={t.panels.yarns}
                 className={cn(
-                  'w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                  'w-full min-h-[44px] rounded-kw-sm border-0 flex items-center justify-center cursor-pointer active:translate-y-[1px] active:shadow-none transition-colors',
                   touchSheet === 'yarn'
-                    ? 'border-accent-line bg-accent-soft'
-                    : 'border-line bg-surface-subtle/80 hover:bg-surface-hover'
+                    ? 'bg-accent-soft shadow-[var(--kw-btn-shadow-primary)]'
+                    : 'bg-surface-subtle/90 hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                 )}
               >
                 <span
-                  className="w-6 h-6 rounded-kw-sm border border-black/25 dark:border-white/30 flex items-center justify-center font-mono text-xs font-bold"
+                  className="w-6 h-6 rounded-kw-sm border border-line-strong flex items-center justify-center font-mono text-xs font-bold"
                   style={{
                     backgroundColor: doc.pal[curYarn] ?? DEFAULT_PALETTE[0],
                     color: contrastInk(doc.pal[curYarn] ?? DEFAULT_PALETTE[0]),
@@ -4015,10 +4424,10 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 aria-label={t.toolbar.rightPanel}
                 title={t.toolbar.rightPanel}
                 className={cn(
-                  'relative w-full min-h-[44px] rounded-kw-sm border flex items-center justify-center cursor-pointer transition-colors',
+                  'relative w-full min-h-[44px] rounded-kw-sm border-0 flex items-center justify-center cursor-pointer active:translate-y-[1px] active:shadow-none transition-colors',
                   touchSheet === 'inspector'
-                    ? 'border-accent-line bg-accent text-accent-fg'
-                    : 'border-line bg-surface-subtle/80 text-ink hover:bg-surface-hover'
+                    ? 'bg-accent text-accent-fg shadow-[var(--kw-btn-shadow-primary)]'
+                    : 'bg-surface-subtle/90 text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)]'
                 )}
               >
                 {analysis.mismatchRows.length > 0 || analysis.floatRows.length > 0 ? (
@@ -4031,7 +4440,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               </button>
             </div>
 
-            <div className="w-full border-t border-line pt-1.5 mt-auto flex flex-col gap-1">
+            <div className="w-full pt-2.5 mt-auto flex flex-col gap-1">
               <ToggleButton
                 layout="tile"
                 tone="neutral"
@@ -4142,6 +4551,9 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               setCommandQuery('');
               setCommandOpen(true);
             }}
+            onClearPattern={handleClearPattern}
+            onEdgeRow={handleEdgeRow}
+            onEdgeCol={handleEdgeCol}
             setStatusMsg={setStatusMsg}
             resetSignal={islandsResetCounter}
             activeSheet={touchSheet}
@@ -4207,7 +4619,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
           }}
         >
           <span
-            className="w-5 h-5 rounded-[4px] border border-black/25 dark:border-white/30 flex items-center justify-center text-[11px] font-bold shrink-0"
+            className="w-5 h-5 rounded-[2.5px] border border-line-strong flex items-center justify-center text-[11px] font-bold shrink-0"
             style={{
               backgroundColor:
                 doc.grid[touchLoupe.r]?.[touchLoupe.k] >= 0
@@ -4302,19 +4714,19 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
         </div>
       </Modal>
 
-      {/* Transient Floating Status Toast (only rendered when statusMsg is non-empty) */}
+      {/* Transient Floating Status Toast (dark earthy feedback tone matching palette) */}
       {statusMsg && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-18 md:bottom-5 left-3 right-3 sm:left-auto sm:right-5 z-[var(--kw-z-toast)] sm:max-w-sm rounded-kw-md border border-line-strong bg-surface shadow-kw-lg px-4 py-2.5 flex items-center gap-3 text-[13px] font-medium text-ink"
+          className="fixed bottom-18 md:bottom-5 left-3 right-3 sm:left-auto sm:right-5 z-[var(--kw-z-toast)] sm:max-w-sm rounded-kw-md bg-danger-surface shadow-kw-lg px-4 py-2.5 flex items-center gap-3 text-[13px] font-medium text-danger-fg"
         >
           <span className="flex-1 tabular-nums">{statusMsg}</span>
           <button
             type="button"
             onClick={() => setStatusMsg('')}
             aria-label={lang === 'hu' ? 'Értesítés bezárása' : 'Dismiss notification'}
-            className="w-7 h-7 rounded-kw-sm flex items-center justify-center text-ink-muted hover:text-ink hover:bg-surface-hover cursor-pointer shrink-0"
+            className="w-7 h-7 rounded-kw-sm flex items-center justify-center text-danger-fg/75 hover:text-danger-fg hover:bg-danger-surface-hover cursor-pointer shrink-0"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -4347,7 +4759,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   ? { transform: `translateY(${drawerDragY}px)`, transition: 'none' }
                   : { transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)' }
               }
-              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
+              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-[10px] border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
             >
               <div
                 onPointerDown={(e) => {
@@ -4381,7 +4793,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   drawerDragStartYRef.current = null;
                   setDrawerDragY(0);
                 }}
-                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-2xl sm:rounded-none touch-none sm:touch-auto select-none"
+                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-[10px] sm:rounded-none touch-none sm:touch-auto select-none"
               >
                 <div className="sm:hidden pt-2.5 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
                   <span className="w-10 h-1.5 rounded-full bg-line-strong" aria-hidden="true" />
@@ -4494,13 +4906,12 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                               </span>
                             </Button>
                             <Button
-                              variant="icon"
+                              variant="danger"
                               size="icon"
                               onClick={() => onChangeStamps(stamps.filter((x) => x.id !== st.id))}
                               aria-label="Delete stamp"
-                              className="text-danger"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5 text-white" />
                             </Button>
                           </div>
                         ))}
@@ -4519,7 +4930,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   ? { transform: `translateY(${drawerDragY}px)`, transition: 'none' }
                   : { transition: 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)' }
               }
-              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
+              className="fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-[10px] border-t sm:static sm:ml-auto sm:w-full sm:max-w-md sm:h-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l border-line-strong bg-surface shadow-kw-lg flex flex-col pb-safe"
             >
               <div
                 onPointerDown={(e) => {
@@ -4553,7 +4964,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   drawerDragStartYRef.current = null;
                   setDrawerDragY(0);
                 }}
-                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-2xl sm:rounded-none touch-none sm:touch-auto select-none"
+                className="sticky top-0 z-10 bg-surface border-b border-line rounded-t-[10px] sm:rounded-none touch-none sm:touch-auto select-none"
               >
                 <div className="sm:hidden pt-2.5 pb-1 flex justify-center cursor-grab active:cursor-grabbing">
                   <span className="w-10 h-1.5 rounded-full bg-line-strong" aria-hidden="true" />
@@ -4667,7 +5078,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                       </Select>
                     </div>
                     <div className="overflow-auto rounded-kw-sm border border-line bg-knit-bed p-1 flex justify-center">
-                      <canvas ref={previewCanvasRef} className="max-w-full rounded" />
+                      <canvas ref={previewCanvasRef} className="max-w-full rounded-[2.5px]" />
                     </div>
                     <p className="text-ink-secondary font-medium tabular-nums">
                       {doc.cols} × {doc.rows} = {formatDimensionsCm(doc.cols, doc.rows, doc.gauge)}
@@ -4724,22 +5135,65 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     </div>
 
                     <div className="grid grid-cols-2 gap-1.5 border-t border-line pt-2.5">
-                      <Button variant="secondary" onClick={handleInsertRow}>
-                        <Rows className="w-3.5 h-3.5" />
-                        {t.size.insertRow}
-                      </Button>
-                      <Button variant="secondary" onClick={handleDeleteRow}>
-                        <Minus className="w-3.5 h-3.5" />
-                        {t.size.delRow}
-                      </Button>
-                      <Button variant="secondary" onClick={handleInsertCol}>
-                        <Columns className="w-3.5 h-3.5" />
-                        {t.size.insertCol}
-                      </Button>
-                      <Button variant="secondary" onClick={handleDeleteCol}>
-                        <Minus className="w-3.5 h-3.5" />
-                        {t.size.delCol}
-                      </Button>
+                      {(
+                        [
+                          {
+                            label: lang === 'hu' ? 'Felül (sor)' : 'Top row',
+                            onDec: () => handleEdgeRow('top', 'remove'),
+                            onInc: () => handleEdgeRow('top', 'add'),
+                            decDisabled: doc.rows <= 2,
+                            incDisabled: doc.rows >= 400,
+                          },
+                          {
+                            label: lang === 'hu' ? 'Alul (sor)' : 'Bottom row',
+                            onDec: () => handleEdgeRow('bottom', 'remove'),
+                            onInc: () => handleEdgeRow('bottom', 'add'),
+                            decDisabled: doc.rows <= 2,
+                            incDisabled: doc.rows >= 400,
+                          },
+                          {
+                            label: lang === 'hu' ? 'Balra (oszlop)' : 'Left col',
+                            onDec: () => handleEdgeCol('left', 'remove'),
+                            onInc: () => handleEdgeCol('left', 'add'),
+                            decDisabled: doc.cols <= 2,
+                            incDisabled: doc.cols >= 300,
+                          },
+                          {
+                            label: lang === 'hu' ? 'Jobbra (oszlop)' : 'Right col',
+                            onDec: () => handleEdgeCol('right', 'remove'),
+                            onInc: () => handleEdgeCol('right', 'add'),
+                            decDisabled: doc.cols <= 2,
+                            incDisabled: doc.cols >= 300,
+                          },
+                        ] as const
+                      ).map((dir) => (
+                        <div
+                          key={dir.label}
+                          className="flex items-center justify-between gap-1 rounded-kw-sm bg-surface-subtle/85 px-2 py-1"
+                        >
+                          <span className="text-[11px] font-medium text-ink-secondary truncate">{dir.label}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              disabled={dir.decDisabled}
+                              onClick={dir.onDec}
+                              aria-label={`${dir.label} −1`}
+                              className="min-h-[30px] min-w-[28px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={dir.incDisabled}
+                              onClick={dir.onInc}
+                              aria-label={`${dir.label} +1`}
+                              className="min-h-[30px] min-w-[28px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     <div className="border-t border-line pt-2.5 space-y-2">
@@ -4790,15 +5244,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                     </div>
                     <Button
                       variant="danger"
-                      onClick={() => {
-                        pushUndo(doc);
-                        onChangeDoc({
-                          ...doc,
-                          grid: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
-                          sy: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
-                          updatedAt: Date.now(),
-                        });
-                      }}
+                      onClick={handleClearPattern}
                       className="w-full"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -4860,7 +5306,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                         <a
                           href={pngPreviewUrl}
                           download={`${safeFilename(doc.nm)}.png`}
-                          className="inline-flex items-center justify-center gap-1.5 min-h-10 px-3.5 py-2 rounded-kw-sm border border-line-strong bg-accent hover:bg-accent-hover text-accent-fg font-display font-bold text-xs w-full"
+                          className="inline-flex items-center justify-center gap-1.5 min-h-10 px-3.5 py-2 rounded-kw-sm border-0 bg-accent hover:bg-accent-hover text-accent-fg shadow-[var(--kw-btn-shadow-primary)] active:translate-y-[1px] active:shadow-none font-display font-bold text-xs w-full"
                         >
                           {lang === 'hu' ? 'PNG letöltése' : 'Download PNG'}
                         </a>
@@ -4994,7 +5440,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                   return (
                     <div key={`${c.n}-${cIdx}`} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-6 h-6 rounded-[5px] border border-line bg-surface-subtle flex items-center justify-center font-bold shrink-0">
+                        <span className="w-6 h-6 rounded-[3px] border border-line bg-surface-subtle flex items-center justify-center font-bold shrink-0">
                           {c.g}
                         </span>
                         <span className="font-mono font-semibold text-ink">{c.n}</span>
@@ -5005,7 +5451,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                           {c.u}→{c.m}
                         </span>
                         <Button
-                          variant="icon"
+                          variant="danger"
                           size="iconSm"
                           disabled={usedCount > 0}
                           title={
@@ -5029,9 +5475,8 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                             else if (curSym > fullIdx) setCurSym((s) => s - 1);
                             onChangeDoc({ ...doc, cus: nextCus, sy: nextSy, updatedAt: Date.now() });
                           }}
-                          className="text-danger"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 text-white" />
                         </Button>
                       </div>
                     </div>
@@ -5105,7 +5550,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
                 className="p-3 font-mono text-xs leading-relaxed"
               />
               {parseErrors.length > 0 && (
-                <ul className="text-xs font-medium text-danger space-y-0.5">
+                <ul className="rounded-kw-sm bg-danger-surface px-3 py-2 text-xs font-medium text-danger-fg space-y-0.5">
                   {parseErrors.map((err, idx) => (
                     <li key={idx}>• {err}</li>
                   ))}
@@ -5170,22 +5615,65 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2 border-t border-line pt-3">
-                <Button variant="secondary" onClick={handleInsertRow}>
-                  <Rows className="w-3.5 h-3.5" />
-                  {t.size.insertRow}
-                </Button>
-                <Button variant="secondary" onClick={handleDeleteRow}>
-                  <Minus className="w-3.5 h-3.5" />
-                  {t.size.delRow}
-                </Button>
-                <Button variant="secondary" onClick={handleInsertCol}>
-                  <Columns className="w-3.5 h-3.5" />
-                  {t.size.insertCol}
-                </Button>
-                <Button variant="secondary" onClick={handleDeleteCol}>
-                  <Minus className="w-3.5 h-3.5" />
-                  {t.size.delCol}
-                </Button>
+                {(
+                  [
+                    {
+                      label: lang === 'hu' ? 'Felül (sor)' : 'Top row',
+                      onDec: () => handleEdgeRow('top', 'remove'),
+                      onInc: () => handleEdgeRow('top', 'add'),
+                      decDisabled: doc.rows <= 2,
+                      incDisabled: doc.rows >= 400,
+                    },
+                    {
+                      label: lang === 'hu' ? 'Alul (sor)' : 'Bottom row',
+                      onDec: () => handleEdgeRow('bottom', 'remove'),
+                      onInc: () => handleEdgeRow('bottom', 'add'),
+                      decDisabled: doc.rows <= 2,
+                      incDisabled: doc.rows >= 400,
+                    },
+                    {
+                      label: lang === 'hu' ? 'Balra (oszlop)' : 'Left col',
+                      onDec: () => handleEdgeCol('left', 'remove'),
+                      onInc: () => handleEdgeCol('left', 'add'),
+                      decDisabled: doc.cols <= 2,
+                      incDisabled: doc.cols >= 300,
+                    },
+                    {
+                      label: lang === 'hu' ? 'Jobbra (oszlop)' : 'Right col',
+                      onDec: () => handleEdgeCol('right', 'remove'),
+                      onInc: () => handleEdgeCol('right', 'add'),
+                      decDisabled: doc.cols <= 2,
+                      incDisabled: doc.cols >= 300,
+                    },
+                  ] as const
+                ).map((dir) => (
+                  <div
+                    key={dir.label}
+                    className="flex items-center justify-between gap-1.5 rounded-kw-sm bg-surface-subtle/85 px-2.5 py-1.5"
+                  >
+                    <span className="text-xs font-medium text-ink-secondary truncate">{dir.label}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={dir.decDisabled}
+                        onClick={dir.onDec}
+                        aria-label={`${dir.label} −1`}
+                        className="min-h-[32px] min-w-[30px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={dir.incDisabled}
+                        onClick={dir.onInc}
+                        aria-label={`${dir.label} +1`}
+                        className="min-h-[32px] min-w-[30px] rounded-[2.5px] border-0 bg-surface flex items-center justify-center text-ink hover:bg-surface-hover shadow-[var(--kw-btn-shadow)] active:translate-y-[1px] active:shadow-none disabled:opacity-35 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="border-t border-line pt-3 space-y-2">
@@ -5237,15 +5725,7 @@ export const DesignerWorkspace: React.FC<DesignerWorkspaceProps> = ({
 
               <Button
                 variant="danger"
-                onClick={() => {
-                  pushUndo(doc);
-                  onChangeDoc({
-                    ...doc,
-                    grid: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
-                    sy: Array.from({ length: doc.rows }, () => Array(doc.cols).fill(0)),
-                    updatedAt: Date.now(),
-                  });
-                }}
+                onClick={handleClearPattern}
                 className="w-full"
               >
                 <RotateCcw className="w-4 h-4" />
@@ -5390,7 +5870,11 @@ export const PatternLibraryModal: React.FC<{
           {lang === 'hu' ? '.knit importálása' : 'Import .knit'}
         </Button>
         <input ref={fileRef} type="file" accept=".knit,application/json" hidden onChange={handleFile} />
-        {importError && <span className="text-xs font-medium text-danger">{importError}</span>}
+        {importError && (
+          <span className="rounded-kw-sm bg-danger-surface px-2.5 py-1 text-xs font-medium text-danger-fg">
+            {importError}
+          </span>
+        )}
       </div>
 
       <div className="overflow-y-auto divide-y divide-line px-6 py-2">
@@ -5443,15 +5927,14 @@ export const PatternLibraryModal: React.FC<{
                   <Copy className="w-4 h-4" />
                 </Button>
                 <Button
-                  variant="icon"
+                  variant="danger"
                   size="icon"
                   disabled={patterns.length <= 1}
                   onClick={() => onDeletePattern(p.id)}
                   title={lang === 'hu' ? 'Törlés' : 'Delete'}
                   aria-label={lang === 'hu' ? 'Törlés' : 'Delete'}
-                  className="text-danger border-danger-line"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4 text-white" />
                 </Button>
               </div>
             </div>
